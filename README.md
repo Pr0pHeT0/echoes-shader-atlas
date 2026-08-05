@@ -37,6 +37,20 @@ npm test
 npm run build
 ```
 
+## Deployment targets
+
+The default `npm run build` keeps the project compatible with its Cloudflare Sites deployment.
+Vercel uses a separate Nitro-backed vinext build so both hosting targets can coexist:
+
+```bash
+vercel link --yes --project echoes-shader-atlas --scope echoes
+npm run build:vercel
+vercel deploy --prebuilt --prod --scope echoes
+```
+
+Vercel project settings are committed in `vercel.json`; Nitro's generated Build Output API files and
+the local project link both live under the intentionally ignored `.vercel` directory.
+
 ## Routes
 
 - `/` — immersive reel, classification filters, and the complete effect catalog.

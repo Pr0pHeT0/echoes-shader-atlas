@@ -1,0 +1,137 @@
+{
+  "sourceCommit": "d018f6d057c8f30144979bbcc95436cfb405d7c5",
+  "effects": [
+    { "id": "aurora-field", "status": "active" },
+    { "id": "voice-wave-particles", "status": "active" },
+    { "id": "morphing-echoes-title", "status": "active" },
+    { "id": "orb-to-scene-reveal", "status": "active" },
+    { "id": "audio-reactive-materialization", "status": "archived" }
+  ],
+  "units": [
+    {
+      "id": "aurora-fullscreen-vertex",
+      "sourcePath": "src/game/LandingAuroraBackground.js",
+      "sourceKind": "inline",
+      "sourceSymbol": "vertexShader",
+      "stage": "vertex",
+      "effectIds": ["aurora-field"],
+      "extractedPath": "lib/shaders/shared/fullscreen.vert.glsl",
+      "sha256": "acc7cea70488e5b211a194eaf9602007a7f98d72a75a57fc2094cf6671a75f68"
+    },
+    {
+      "id": "aurora-field-fragment",
+      "sourcePath": "src/game/LandingAuroraBackground.js",
+      "sourceKind": "inline",
+      "sourceSymbol": "fragmentShader",
+      "stage": "fragment",
+      "effectIds": ["aurora-field"],
+      "extractedPath": "lib/shaders/aurora/aurora-field.frag.glsl",
+      "sha256": "01505b93e81ea15b8405e3c40a766f1d8e278bbf8507666e211a8070b6946f28"
+    },
+    {
+      "id": "voice-fullscreen-vertex",
+      "sourcePath": "src/game/BottomVoiceEffect.js",
+      "sourceKind": "inline",
+      "sourceSymbol": "vertexShader",
+      "stage": "vertex",
+      "effectIds": ["voice-wave-particles"],
+      "extractedPath": "lib/shaders/shared/fullscreen.vert.glsl",
+      "sha256": "acc7cea70488e5b211a194eaf9602007a7f98d72a75a57fc2094cf6671a75f68"
+    },
+    {
+      "id": "voice-wave-fragment",
+      "sourcePath": "src/game/BottomVoiceEffect.js",
+      "sourceKind": "inline",
+      "sourceSymbol": "fragmentShader",
+      "stage": "fragment",
+      "effectIds": ["voice-wave-particles"],
+      "extractedPath": "lib/shaders/voice/voice-wave.frag.glsl",
+      "sha256": "73b4f26457954a626ca1c71d418bb131a8b12dace1dbadcd4c9c12563217254c"
+    },
+    {
+      "id": "title-particles-vertex",
+      "sourcePath": "src/shaders/landingTitle.vert",
+      "sourceKind": "file",
+      "stage": "vertex",
+      "effectIds": ["morphing-echoes-title"],
+      "extractedPath": "lib/shaders/title/title-particles.vert.glsl",
+      "sha256": "9c0c06784cd1328dbb7e9bd3a0934cb5f2b729fdb8b1f558b8a754e42d21ceae"
+    },
+    {
+      "id": "title-particles-fragment",
+      "sourcePath": "src/shaders/landingTitle.frag",
+      "sourceKind": "file",
+      "stage": "fragment",
+      "effectIds": ["morphing-echoes-title"],
+      "extractedPath": "lib/shaders/title/title-particles.frag.glsl",
+      "sha256": "30ecc7f9ac7a823c0a9e19fd29d76a42b7af768ab5392e12341cb01e89ec3e79"
+    },
+    {
+      "id": "orb-to-scene-compute",
+      "sourcePath": "src/shaders/gpgpu/gameplayPly.glsl",
+      "sourceKind": "file",
+      "stage": "compute",
+      "effectIds": ["orb-to-scene-reveal"],
+      "extractedPath": "lib/shaders/orb/orb-to-scene.compute.glsl",
+      "sha256": "8b8c42df23350dbce093919f2b48ca6536e63e4e80ee6d4d6f89adb8b653fbbd"
+    },
+    {
+      "id": "orb-to-scene-vertex",
+      "sourcePath": "src/shaders/gameplayPly.vert",
+      "sourceKind": "file",
+      "stage": "vertex",
+      "effectIds": ["orb-to-scene-reveal"],
+      "extractedPath": "lib/shaders/orb/orb-to-scene.vert.glsl",
+      "sha256": "f060e9291f8eb7dc1078c7a900d158eafb94a205cf4f3f7d2579c1ae0a3090cb"
+    },
+    {
+      "id": "orb-to-scene-fragment",
+      "sourcePath": "src/shaders/gameplayPly.frag",
+      "sourceKind": "file",
+      "stage": "fragment",
+      "effectIds": ["orb-to-scene-reveal"],
+      "extractedPath": "lib/shaders/orb/orb-to-scene.frag.glsl",
+      "sha256": "85c0052c4b3d3885d2cc630add1cab5a71feed13ca4ddb9783cf159d7ee7f5af"
+    },
+    {
+      "id": "materialization-compute",
+      "sourcePath": "src/shaders/gpgpu/particles.glsl",
+      "sourceKind": "file",
+      "stage": "compute",
+      "effectIds": ["audio-reactive-materialization"],
+      "extractedPath": "lib/shaders/materialization/materialization.compute.glsl",
+      "sha256": "9c5b913a08ab03d036fb66c978cdec17ecc80902388285b7221b5b9118df490b"
+    },
+    {
+      "id": "materialization-vertex",
+      "sourcePath": "src/shaders/particles.vert",
+      "sourceKind": "file",
+      "stage": "vertex",
+      "effectIds": ["audio-reactive-materialization"],
+      "extractedPath": "lib/shaders/materialization/materialization.vert.glsl",
+      "sha256": "521407b0192242a23b114950323b150d70603816161e86438fba3344510a9f7a"
+    },
+    {
+      "id": "materialization-fragment",
+      "sourcePath": "src/shaders/particles.frag",
+      "sourceKind": "file",
+      "stage": "fragment",
+      "effectIds": ["audio-reactive-materialization"],
+      "extractedPath": "lib/shaders/materialization/materialization.frag.glsl",
+      "sha256": "74d016d4a09b29b2a2a8794bc5470b6412377d59f86ab61d6d22ffaf09d1833b"
+    },
+    {
+      "id": "simplex-noise-4d",
+      "sourcePath": "src/shaders/includes/simplexNoise4d.glsl",
+      "sourceKind": "file",
+      "stage": "include",
+      "effectIds": [
+        "morphing-echoes-title",
+        "orb-to-scene-reveal",
+        "audio-reactive-materialization"
+      ],
+      "extractedPath": "lib/shaders/shared/simplex-noise-4d.glsl",
+      "sha256": "53b44f04caf014ea9288b787ae5fab110a7322a175a1c7d74c51c8f453a77e43"
+    }
+  ]
+}

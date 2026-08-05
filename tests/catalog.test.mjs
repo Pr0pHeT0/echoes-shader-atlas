@@ -1,0 +1,102 @@
+import assert from "node:assert/strict";
+import { access, readFile } from "node:fs/promises";
+import test from "node:test";
+import ts from "typescript";
+
+const catalogUrl = new URL("../lib/catalog/effects.ts", import.meta.url);
+
+async function loadCatalog() {
+  const source = await readFile(catalogUrl, "utf8");
+  const result = ts.transpileModule(source, {
+    compilerOptions: {
+      module: ts.ModuleKind.ESNext,
+      target: ts.ScriptTarget.ES2022,
+    },
+    fileName: "effects.ts",
+    reportDiagnostics: true,
+  });
+
+  const errors = (result.diagnostics ?? []).filter(
+    (diagnostic) => diagnostic.category === ts.DiagnosticCategory.Error,
+  );
+  assert.deepEqual(errors, []);
+
+  const encoded = Buffer.from(result.outputText).toString("base64");
+  return import(`data:text/javascript;base64,${encoded}`);
+}
+
+test("catalog classifies the exact five shader systems", async () => {
+  const { effectFamilies, effectStatuses, shaderEffects } = await loadCatalog();
+
+  assert.deepEqual(
+    shaderEffects.map(({ id, family, status }) => ({ id, family, status })),
+    [
+      { id: "aurora-field", family: "Procedural Backdrop", status: "active" },
+      { id: "voice-wave-particles", family: "Audio Visualization", status: "active" },
+      { id: "morphing-echoes-title", family: "Particle Typography", status: "active" },
+      { id: "orb-to-scene-reveal", family: "Point-cloud Transition", status: "active" },
+      { id: "audio-reactive-materialization", family: "GPGPU Materialization", status: "archived" },
+    ],
+  );
+  assert.deepEqual(effectFamilies, shaderEffects.map((effect) => effect.family));
+  assert.deepEqual(effectStatuses, ["active", "archived"]);
+
+  for (const effect of shaderEffects) {
+    assert.equal(effect.slug, effect.id);
+    assert.equal(effect.runtime, effect.id);
+    assert.ok(effect.drivers.length > 0);
+    assert.ok(effect.techniques.length > 0);
+    assert.ok(effect.primitives.length > 0);
+    assert.ok(effect.presets.length > 0);
+    assert.equal(new Set(effect.presets.map((preset) => preset.id)).size, effect.presets.length);
+  }
+});
+
+test("source index retains 13 original units while deduplicating fullscreen GLSL", async () => {
+  const { shaderSourceUnits } = await loadCatalog();
+
+  assert.equal(shaderSourceUnits.length, 13);
+  assert.equal(new Set(shaderSourceUnits.map((unit) => unit.id)).size, 13);
+  assert.equal(shaderSourceUnits.filter((unit) => unit.sourceKind === "inline").length, 4);
+
+  const extractedPaths = shaderSourceUnits.map((unit) => unit.extractedPath);
+  assert.equal(new Set(extractedPaths).size, 12);
+  assert.equal(
+    extractedPaths.filter((path) => path === "lib/shaders/shared/fullscreen.vert.glsl").length,
+    2,
+  );
+  assert.ok(
+    shaderSourceUnits.some(
+      (unit) => unit.id === "simplex-noise-4d"
+        && unit.stage === "include"
+        && unit.extractedPath === "lib/shaders/shared/simplex-noise-4d.glsl",
+    ),
+  );
+
+  await Promise.all(
+    [...new Set(extractedPaths)].map((path) => access(new URL(`../${path}`, import.meta.url))),
+  );
+});
+
+test("catalog lookup, filters, and JSON serialization are deterministic", async () => {
+  const { filterShaderEffects, getEffectBySlug, shaderEffects } = await loadCatalog();
+
+  assert.equal(getEffectBySlug("orb-to-scene-reveal")?.name, "Orb-to-Scene Reveal");
+  assert.equal(getEffectBySlug("not-a-real-effect"), undefined);
+  assert.deepEqual(
+    filterShaderEffects({ status: "archived" }).map((effect) => effect.id),
+    ["audio-reactive-materialization"],
+  );
+  assert.deepEqual(
+    filterShaderEffects({ family: "Particle Typography" }).map((effect) => effect.id),
+    ["morphing-echoes-title"],
+  );
+  assert.deepEqual(
+    filterShaderEffects({ driver: "pointer" }).map((effect) => effect.id),
+    ["morphing-echoes-title"],
+  );
+
+  const serialized = JSON.stringify(shaderEffects);
+  assert.deepEqual(JSON.parse(serialized), shaderEffects);
+  assert.equal(serialized.includes("function"), false);
+});

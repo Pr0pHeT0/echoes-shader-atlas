@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { SiteFooter } from "../components/SiteFooter";
 import { SiteHeader } from "../components/SiteHeader";
 import { shaderEffects, shaderSourceUnits } from "@/lib/catalog/effects";
@@ -33,9 +32,9 @@ export default function AboutPage() {
               Echoes Shader Atlas separates five visual systems from their original product context,
               preserves their shader logic, and presents each one as a documented, inspectable study.
             </p>
-            <Link className="text-link" href="/#catalog">
+            <a className="text-link" href="/#catalog">
               Browse the five systems <span aria-hidden="true">↘</span>
-            </Link>
+            </a>
           </div>
         </section>
 
@@ -132,9 +131,9 @@ export default function AboutPage() {
               and pull-request expectations. Shader editing and arbitrary uploaded code are deliberately
               outside the v1 project.
             </p>
-            <Link className="text-link" href="/effects/aurora-field">
+            <a className="text-link" href="/effects/aurora-field">
               Open a documented effect <span aria-hidden="true">→</span>
-            </Link>
+            </a>
           </section>
         </div>
       </main>

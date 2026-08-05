@@ -35,6 +35,11 @@ const eslintConfig = defineConfig([
         version: "detect",
       },
     },
+    rules: {
+      // Native navigation avoids a vinext/Nitro RSC-prefetch bundling fault in
+      // the current beta while preserving accessible, platform-safe links.
+      "@next/next/no-html-link-for-pages": "off",
+    },
   },
 ]);
 

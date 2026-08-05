@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useMemo, useState } from "react";
 import { effectFamilies, shaderEffects } from "@/lib/catalog/effects";
 import type { EffectFamily, EffectId, EffectStatus } from "@/lib/catalog/types";
@@ -56,9 +55,9 @@ export function HomeGallery() {
             </h1>
             <p className="hero-summary">{selected.summary}</p>
             <div className="hero-actions">
-              <Link className="primary-link" href={`/effects/${selected.slug}`}>
+              <a className="primary-link" href={`/effects/${selected.slug}`}>
                 Explore the system <span aria-hidden="true">↗</span>
-              </Link>
+              </a>
               <button className="ghost-button" type="button" onClick={() => setPaused((value) => !value)}>
                 {paused ? "Resume motion" : "Pause motion"}
               </button>
@@ -144,9 +143,9 @@ export function HomeGallery() {
                 </div>
                 <h3>{effect.name}</h3>
                 <p>{effect.summary}</p>
-                <Link className="effect-card__link" href={`/effects/${effect.slug}`}>
+                <a className="effect-card__link" href={`/effects/${effect.slug}`}>
                   Open study <span aria-hidden="true">→</span>
-                </Link>
+                </a>
               </div>
             </article>
           ))}
@@ -165,9 +164,9 @@ export function HomeGallery() {
             models are replaced by seeded geometry, and every recovered source maps to a public,
             reviewable manifest.
           </p>
-          <Link className="text-link" href="/about">
+          <a className="text-link" href="/about">
             Read the methodology <span aria-hidden="true">↗</span>
-          </Link>
+          </a>
         </div>
         <div className="editorial-stats" aria-label="Extraction statistics">
           <div className="editorial-stat"><strong>05</strong><span>Distinct visual systems</span></div>

@@ -1,5 +1,11 @@
+import type { Metadata } from "next";
 import { SiteFooter } from "./components/SiteFooter";
 import { SiteHeader } from "./components/SiteHeader";
+
+export const metadata: Metadata = {
+  title: "Shader Study Not Found",
+  robots: { index: false, follow: false },
+};
 
 export default function NotFound() {
   return (

@@ -100,3 +100,34 @@ test("catalog lookup, filters, and JSON serialization are deterministic", async 
   assert.deepEqual(JSON.parse(serialized), shaderEffects);
   assert.equal(serialized.includes("function"), false);
 });
+
+test("catalog SEO copy is unique, bounded, connected, and serializable", async () => {
+  const { shaderEffects } = await loadCatalog();
+  const effectIds = new Set(shaderEffects.map((effect) => effect.id));
+  const titles = new Set();
+  const descriptions = new Set();
+  const keywords = new Set();
+
+  for (const effect of shaderEffects) {
+    const renderedTitle = `${effect.seo.title} | Echoes Shader Atlas`;
+    assert.ok(renderedTitle.length >= 45 && renderedTitle.length <= 60, renderedTitle);
+    assert.ok(
+      effect.seo.description.length >= 145 && effect.seo.description.length <= 160,
+      `${effect.id} description is ${effect.seo.description.length} characters`,
+    );
+    assert.ok(effect.seo.primaryKeyword.toLowerCase().includes("three.js"));
+    assert.ok(effect.seo.workflow.length >= 3);
+    assert.equal(effect.seo.relatedEffectIds.length, 2);
+    assert.equal(new Set(effect.seo.relatedEffectIds).size, 2);
+    assert.equal(effect.seo.relatedEffectIds.includes(effect.id), false);
+    for (const relatedId of effect.seo.relatedEffectIds) assert.ok(effectIds.has(relatedId));
+
+    titles.add(effect.seo.title);
+    descriptions.add(effect.seo.description);
+    keywords.add(effect.seo.primaryKeyword);
+  }
+
+  assert.equal(titles.size, shaderEffects.length);
+  assert.equal(descriptions.size, shaderEffects.length);
+  assert.equal(keywords.size, shaderEffects.length);
+});

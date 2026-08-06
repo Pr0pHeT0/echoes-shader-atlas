@@ -1,15 +1,16 @@
 import { AnalyticsPreferences } from "../components/GoogleAnalytics";
+import { Breadcrumbs } from "../components/Breadcrumbs";
 import { JsonLd } from "../components/JsonLd";
 import { SiteFooter } from "../components/SiteFooter";
 import { SiteHeader } from "../components/SiteHeader";
 import { createPageMetadata, SITE_URL } from "@/lib/site";
 
 const description =
-  "How Echoes Shader Atlas handles optional analytics, local preferences, and visitor privacy.";
+  "Learn how Echoes Shader Atlas uses consent-gated Google Analytics, local browser preferences, limited event data, synthetic audio, and privacy controls.";
 
 export const metadata = createPageMetadata({
   path: "/privacy",
-  title: "Privacy",
+  title: "Privacy & Analytics",
   description,
 });
 
@@ -31,6 +32,7 @@ export default function PrivacyPage() {
       <SiteHeader />
 
       <main className="page-main">
+        <Breadcrumbs current="Privacy & Analytics" />
         <section className="about-hero" aria-labelledby="privacy-title">
           <div>
             <span className="eyebrow">Privacy / analytics choices</span>

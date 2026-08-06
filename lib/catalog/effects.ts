@@ -191,6 +191,32 @@ export const shaderEffects: readonly ShaderEffectMeta[] = [
     summary: "Layered cyan and violet light shaped by time, noise, and a quiet synthetic pulse.",
     description:
       "Five octaves of value noise bend three exponential light bands across an aspect-correct fullscreen plane. The original timing, color mix, vignette, and optional audio gain remain intact.",
+    seo: {
+      title: "Three.js Aurora Shader & GLSL Source",
+      description:
+        "Explore an open-source Three.js aurora shader built with five-octave FBM, layered light bands, and optional synthetic audio. Run the demo and inspect the GLSL.",
+      primaryKeyword: "Three.js aurora shader",
+      headingQualifier: "Open-source Three.js GLSL aurora shader",
+      anatomyHeading: "How the aurora shader works.",
+      sourceHeading: "GLSL source: fullscreen vertex and fragment stages.",
+      adaptation:
+        "No visual input geometry changed. The inline production shader was separated into reviewable GLSL files and connected to a synthetic audio control.",
+      workflow: [
+        {
+          title: "Correct the fullscreen coordinates",
+          description: "The vertex pass supplies aspect-aware UV coordinates so the field keeps its proportions across viewport sizes.",
+        },
+        {
+          title: "Build a five-octave FBM field",
+          description: "Layered value noise bends the bands while time advances the field at the original production rate.",
+        },
+        {
+          title: "Shape and mix the light bands",
+          description: "Three exponential bands combine cyan, violet, vignette, and optional synthetic audio gain in the fragment stage.",
+        },
+      ],
+      relatedEffectIds: ["voice-wave-particles", "morphing-echoes-title"],
+    },
     drivers: ["Time", "Synthetic audio (optional)"],
     techniques: [
       "Five-octave FBM",
@@ -226,6 +252,32 @@ export const shaderEffects: readonly ShaderEffectMeta[] = [
     summary: "A luminous additive waveform assembled from hundreds of procedural point-like sparks.",
     description:
       "Three seeded wave layers translate synthetic level, bass, mid, and treble values into motion, density, tint, and alpha. It is an audio study without microphone access or recorded media.",
+    seo: {
+      title: "Three.js Audio Visualizer Shader",
+      description:
+        "Study a Three.js audio visualizer shader that maps synthetic bass, mid, treble, and level into three additive procedural wave layers. Live demo and GLSL source.",
+      primaryKeyword: "Three.js audio visualizer shader",
+      headingQualifier: "Audio-reactive Three.js fragment shader demo",
+      anatomyHeading: "How synthetic frequency bands drive the visualizer.",
+      sourceHeading: "GLSL source: the audio waveform fragment stage.",
+      adaptation:
+        "The original audio inputs are replaced by deterministic synthetic level and frequency controls. No microphone or recording is requested.",
+      workflow: [
+        {
+          title: "Seed three procedural wave layers",
+          description: "Each layer creates its own moving spark field, phase, width, and vertical displacement inside one fragment pass.",
+        },
+        {
+          title: "Map the frequency bands",
+          description: "Synthetic level, bass, mid, and treble values control motion, density, color, and opacity without collecting audio.",
+        },
+        {
+          title: "Blend the waveform additively",
+          description: "Cyan, amber, and pearl sparks overlap as luminous energy while the production blend behavior stays intact.",
+        },
+      ],
+      relatedEffectIds: ["audio-reactive-materialization", "aurora-field"],
+    },
     drivers: ["Time", "Synthetic level", "Synthetic bass", "Synthetic mid", "Synthetic treble"],
     techniques: [
       "Procedural dot field",
@@ -261,6 +313,32 @@ export const shaderEffects: readonly ShaderEffectMeta[] = [
     summary: "The word ECHOES drifts between five typefaces, an orb, and an icosahedral constellation.",
     description:
       "Canvas-sampled glyph points move through font targets and alternate geometric forms. Pointer repulsion, seeded depth, 4D simplex flow, additive point sprites, and an explosion state preserve the original title system while using neutral ECHOES copy.",
+    seo: {
+      title: "Three.js Particle Text Morph Shader",
+      description:
+        "See a Three.js particle text morph shader move ECHOES across five fonts, an orb, and an icosahedron using point sprites, pointer forces, and 4D noise.",
+      primaryKeyword: "Three.js particle text morph shader",
+      headingQualifier: "Particle text morphing with Three.js and GLSL",
+      anatomyHeading: "How the particle text morph works.",
+      sourceHeading: "GLSL source: particle text vertex and fragment stages.",
+      adaptation:
+        "The production wordmark PLAYWORLDS becomes the neutral title ECHOES. The five OFL font targets, morph equations, pointer forces, and alternate forms remain.",
+      workflow: [
+        {
+          title: "Sample five glyph masks",
+          description: "Canvas text sampling converts ECHOES into point targets for each included OFL-licensed typeface.",
+        },
+        {
+          title: "Choose a morph target",
+          description: "Uniform state blends the points between typography, a flowing orb, an icosahedron, and the seeded burst envelope.",
+        },
+        {
+          title: "Move and render the point sprites",
+          description: "Pointer repulsion, seeded depth, and 4D simplex flow animate additive sprites in the vertex and fragment stages.",
+        },
+      ],
+      relatedEffectIds: ["orb-to-scene-reveal", "aurora-field"],
+    },
     drivers: ["Time", "Pointer", "Font phase", "Preset state"],
     techniques: [
       "Canvas glyph sampling",
@@ -298,6 +376,36 @@ export const shaderEffects: readonly ShaderEffectMeta[] = [
     summary: "A silver orb opens into a terrain-like point cloud carried by a looping flow simulation.",
     description:
       "A GPGPU position texture resets each particle by lifetime, pushes it through a 4D simplex field, and blends the rendered point from an orb target into seeded procedural terrain. Lit sprites and depth fog complete the scene reveal.",
+    seo: {
+      title: "Three.js GPGPU Point-Cloud Morph",
+      description:
+        "Inspect a Three.js point-cloud morph that moves 16K–64K particles from an orb into seeded terrain using GPGPU feedback, lifetime resets, fog, and GLSL.",
+      primaryKeyword: "Three.js point-cloud morph shader",
+      headingQualifier: "GPGPU point-cloud morph shader for Three.js",
+      anatomyHeading: "How GPGPU feedback drives the point-cloud transition.",
+      sourceHeading: "GLSL source: GPGPU compute, vertex, and fragment stages.",
+      adaptation:
+        "The unlicensed PLY target is replaced by deterministic seeded terrain. The orb target, lifetime reset, flow field, morph, sprite lighting, and fog remain.",
+      workflow: [
+        {
+          title: "Initialize the particle targets",
+          description: "Each point receives an orb position, a seeded terrain position, and a deterministic lifetime within a 16K or 64K budget.",
+        },
+        {
+          title: "Advance the GPGPU feedback texture",
+          description: "A compute shader resets expired points and moves active particles through the shared 4D simplex flow field.",
+        },
+        {
+          title: "Morph orb into terrain",
+          description: "Reveal progress blends the vertex targets while the live simulation adds controlled drift to the transition.",
+        },
+        {
+          title: "Light and fog the sprites",
+          description: "The fragment stage shades circular points and fades them into depth fog to complete the scene reveal.",
+        },
+      ],
+      relatedEffectIds: ["audio-reactive-materialization", "morphing-echoes-title"],
+    },
     drivers: ["Time", "Reveal progress", "Particle lifetime"],
     techniques: [
       "GPGPU position feedback",
@@ -339,6 +447,36 @@ export const shaderEffects: readonly ShaderEffectMeta[] = [
     summary: "Four sections of a torus-knot form resolve from an audio-reactive simulated point field.",
     description:
       "This archived system maps synthetic level, bass, mid, and treble into flow time, influence, frequency, radial distortion, and point size. A section threshold turns the simulated cloud into a deterministic segmented torus knot without redistributing the original GLB.",
+    seo: {
+      title: "Three.js GPGPU Flow-Field Particles",
+      description:
+        "Explore audio-reactive GPGPU flow-field particles in Three.js as four torus-knot sections materialize from a simulated cloud. Live demo and GLSL source.",
+      primaryKeyword: "Three.js GPGPU flow-field particles",
+      headingQualifier: "Audio-reactive GPGPU particle shader for Three.js",
+      anatomyHeading: "How audio drives the GPGPU materialization.",
+      sourceHeading: "GLSL source: GPGPU compute, vertex, and fragment stages.",
+      adaptation:
+        "The unlicensed GLB pendant is replaced by a deterministic segmented torus knot. The four-section threshold and audio-reactive simulation stay unchanged.",
+      workflow: [
+        {
+          title: "Simulate the flow field",
+          description: "A feedback texture carries each point through a 4D simplex field and resets the particle when its lifetime ends.",
+        },
+        {
+          title: "Map synthetic audio",
+          description: "Level, bass, mid, and treble drive flow time, influence, frequency, radial distortion, and rendered point size.",
+        },
+        {
+          title: "Reveal four deterministic sections",
+          description: "A section threshold moves the simulated cloud into successive portions of the segmented torus-knot target.",
+        },
+        {
+          title: "Render the materialized form",
+          description: "Vertex deformation and additive point sprites hold the archived production behavior in a redistributable study.",
+        },
+      ],
+      relatedEffectIds: ["voice-wave-particles", "orb-to-scene-reveal"],
+    },
     drivers: ["Time", "Synthetic level", "Synthetic bass", "Synthetic mid", "Synthetic treble", "Section count"],
     techniques: [
       "GPGPU flow field",

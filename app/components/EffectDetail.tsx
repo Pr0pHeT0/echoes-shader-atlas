@@ -1,9 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { Breadcrumbs } from "./Breadcrumbs";
 import type { ShaderEffectMeta } from "@/lib/catalog/types";
 import { effectShaderSources } from "@/lib/effects/source-registry";
 import { trackEvent } from "@/lib/analytics";
+import { SITE_GITHUB_URL, SITE_MANIFEST_URL, SITE_THREE_VERSION } from "@/lib/site";
 import { ShaderStage, type ShaderStageAudio, type ShaderStageQuality } from "./ShaderStage";
 import { SourceBrowser } from "./SourceBrowser";
 
@@ -87,6 +89,7 @@ export function EffectDetail({ effect }: { effect: ShaderEffectMeta }) {
   return (
     <>
       <section className="detail-hero" aria-labelledby="effect-title">
+        <Breadcrumbs current={effect.name} floating />
         <ShaderStage
           key={`${effect.id}-${restartKey}`}
           effectId={effect.id}
@@ -101,9 +104,12 @@ export function EffectDetail({ effect }: { effect: ShaderEffectMeta }) {
         <div className="detail-hero__content">
           <div>
             <span className="section-kicker">{effect.eyebrow}</span>
-            <h1 className="detail-hero__title" id="effect-title">{effect.name}</h1>
+            <h1 className="detail-hero__title" id="effect-title">
+              {effect.name}
+              <span className="detail-hero__title-context">{effect.seo.headingQualifier}</span>
+            </h1>
           </div>
-          <p className="detail-hero__summary">{effect.summary}</p>
+          <p className="detail-hero__summary">{effect.seo.description}</p>
         </div>
 
         <div className="detail-controls" aria-label="Shader preview controls">
@@ -152,7 +158,7 @@ export function EffectDetail({ effect }: { effect: ShaderEffectMeta }) {
         <section className="detail-intro" aria-labelledby="anatomy-title">
           <div>
             <span className="section-kicker">System anatomy</span>
-            <h2 id="anatomy-title">Classified by what moves it.</h2>
+            <h2 id="anatomy-title">{effect.seo.anatomyHeading}</h2>
             <dl className="detail-classification">
               <ClassificationRow label="Family" value={effect.family} />
               <ClassificationRow label="Status" value={effect.statusLabel} />
@@ -173,17 +179,49 @@ export function EffectDetail({ effect }: { effect: ShaderEffectMeta }) {
               This preview uses one managed WebGL2 context, a capped pixel ratio, deterministic
               geometry, and complete GPU cleanup when you leave or switch studies.
             </p>
+            <div className="effect-workflow" aria-labelledby="workflow-title">
+              <h3 id="workflow-title">Pipeline, step by step</h3>
+              <ol>
+                {effect.seo.workflow.map((step) => (
+                  <li key={step.title}>
+                    <strong>{step.title}</strong>
+                    <p>{step.description}</p>
+                  </li>
+                ))}
+              </ol>
+            </div>
             <div className="technical-notes" aria-label="Compatibility and credits">
               <p>
                 <strong>Compatibility</strong>
-                The live study requires WebGL2. Source, classification, and notes remain readable
-                when graphics are unavailable, animation is disabled, or the context is lost.
+                The live study uses Three.js {SITE_THREE_VERSION} and requires WebGL2. Source,
+                classification, and notes remain readable when graphics are unavailable,
+                animation is disabled, or the context is lost.
               </p>
               <p>
                 <strong>Credit</strong>
                 First-party GLSL is extracted from commit <code>d018f6d057c8f30144979bbcc95436cfb405d7c5</code>
                 {usesAshimaNoise ? "; the shared 4D simplex dependency retains the Ashima MIT notice" : ""}.
               </p>
+              <p>
+                <strong>Atlas adaptation</strong>
+                {effect.seo.adaptation}
+              </p>
+            </div>
+            <div className="source-links" aria-label="Repository source links">
+              <a className="inline-link" href={SITE_MANIFEST_URL} target="_blank" rel="noreferrer">
+                Extraction manifest <span aria-hidden="true">↗</span>
+              </a>
+              {effect.sourceUnits.map((unit) => (
+                <a
+                  className="inline-link"
+                  href={`${SITE_GITHUB_URL}/blob/main/${unit.extractedPath}`}
+                  key={unit.id}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {unit.label} source <span aria-hidden="true">↗</span>
+                </a>
+              ))}
             </div>
           </div>
         </section>
@@ -228,7 +266,7 @@ export function EffectDetail({ effect }: { effect: ShaderEffectMeta }) {
           </section>
         ) : null}
 
-        <SourceBrowser effectId={effect.id} sources={sources} />
+        <SourceBrowser effectId={effect.id} heading={effect.seo.sourceHeading} sources={sources} />
       </div>
     </>
   );

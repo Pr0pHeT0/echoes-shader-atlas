@@ -5,9 +5,13 @@ import {
   SITE_DESCRIPTION,
   SITE_GITHUB_URL,
   SITE_KEYWORDS,
+  SITE_MAINTAINER_NAME,
+  SITE_MAINTAINER_URL,
   SITE_NAME,
+  SITE_PUBLISHED_DATE,
   SITE_SOCIAL_DESCRIPTION,
   SITE_SOCIAL_IMAGE,
+  SITE_UPDATED_DATE,
   SITE_URL,
 } from "@/lib/site";
 import "./globals.css";
@@ -16,17 +20,25 @@ export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
     default: SITE_NAME,
-    template: `%s — ${SITE_NAME}`,
+    template: `%s | ${SITE_NAME}`,
   },
   description: SITE_DESCRIPTION,
   applicationName: SITE_NAME,
   icons: {
-    icon: [{ url: "/favicon.svg", type: "image/svg+xml" }],
-    shortcut: "/favicon.svg",
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/favicon.svg", type: "image/svg+xml" },
+      { url: "/icon-192.png", type: "image/png", sizes: "192x192" },
+    ],
+    shortcut: "/favicon.ico",
+    apple: [{ url: "/icon-192.png", sizes: "192x192", type: "image/png" }],
   },
   keywords: [...SITE_KEYWORDS],
-  authors: [{ name: `${SITE_NAME} contributors`, url: SITE_GITHUB_URL }],
-  creator: SITE_NAME,
+  authors: [
+    { name: SITE_MAINTAINER_NAME, url: SITE_MAINTAINER_URL },
+    { name: `${SITE_NAME} contributors`, url: SITE_GITHUB_URL },
+  ],
+  creator: SITE_MAINTAINER_NAME,
   publisher: SITE_NAME,
   category: "Technology",
   manifest: "/manifest.webmanifest",
@@ -34,18 +46,6 @@ export const metadata: Metadata = {
     email: false,
     address: false,
     telephone: false,
-  },
-  robots: {
-    index: true,
-    follow: true,
-    googleBot: {
-      index: true,
-      follow: true,
-      noimageindex: false,
-      "max-image-preview": "large",
-      "max-snippet": -1,
-      "max-video-preview": -1,
-    },
   },
   openGraph: {
     type: "website",
@@ -86,6 +86,8 @@ const siteStructuredData = {
       name: SITE_NAME,
       description: SITE_DESCRIPTION,
       inLanguage: "en",
+      datePublished: SITE_PUBLISHED_DATE,
+      dateModified: SITE_UPDATED_DATE,
       publisher: { "@id": `${SITE_URL}/#organization` },
     },
     {
@@ -95,6 +97,11 @@ const siteStructuredData = {
       url: `${SITE_URL}/`,
       description: "An open-source archive and visual showcase for production shader systems.",
       sameAs: [SITE_GITHUB_URL],
+      founder: {
+        "@type": "Person",
+        name: SITE_MAINTAINER_NAME,
+        url: SITE_MAINTAINER_URL,
+      },
     },
   ],
 };

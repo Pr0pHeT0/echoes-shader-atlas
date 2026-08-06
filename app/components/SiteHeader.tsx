@@ -1,3 +1,5 @@
+import { SITE_GITHUB_URL } from "@/lib/site";
+
 export function SiteHeader({ floating = false }: { floating?: boolean }) {
   return (
     <header className={`site-header${floating ? " site-header--floating" : ""}`}>
@@ -11,10 +13,10 @@ export function SiteHeader({ floating = false }: { floating?: boolean }) {
         </span>
       </a>
       <nav className="site-nav" aria-label="Primary navigation">
-        <a href="/#catalog">Index</a>
+        <a href="/#catalog">Shader index</a>
         <a href="/about">About</a>
-        <a href="https://opensource.org/license/mit" target="_blank" rel="noreferrer">
-          MIT <span aria-hidden="true">↗</span>
+        <a href={SITE_GITHUB_URL} target="_blank" rel="noreferrer">
+          GitHub source <span aria-hidden="true">↗</span>
         </a>
       </nav>
     </header>

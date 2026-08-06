@@ -1,19 +1,27 @@
 import type { Metadata } from "next";
+import { Breadcrumbs } from "../components/Breadcrumbs";
 import { JsonLd } from "../components/JsonLd";
 import { SiteFooter } from "../components/SiteFooter";
 import { SiteHeader } from "../components/SiteHeader";
 import { shaderEffects, shaderSourceUnits } from "@/lib/catalog/effects";
 import {
   createPageMetadata,
+  SITE_CONTRIBUTING_URL,
+  SITE_GITHUB_URL,
+  SITE_MAINTAINER_NAME,
+  SITE_MAINTAINER_URL,
+  SITE_MANIFEST_URL,
   SITE_SOURCE_COMMIT,
+  SITE_THREE_VERSION,
+  SITE_UPDATED_DATE,
   SITE_URL,
 } from "@/lib/site";
 
 const description =
-  "How five production shader systems were extracted, classified, relicensed, and adapted into an open-source visual atlas.";
+  "Read how five production GLSL shader systems were extracted, classified, licensed under MIT, tested, and rebuilt as reproducible Three.js studies.";
 
 export const metadata: Metadata = createPageMetadata({
-  title: "Method & Provenance",
+  title: "Open-Source GLSL Shader Archive",
   description,
   path: "/about",
   keywords: ["shader provenance", "shader extraction", "MIT License", "GLSL archive"],
@@ -31,6 +39,7 @@ const aboutStructuredData = {
       inLanguage: "en",
       isPartOf: { "@id": `${SITE_URL}/#website` },
       mainEntity: { "@id": `${SITE_URL}/#organization` },
+      breadcrumb: { "@id": `${SITE_URL}/about#breadcrumb` },
       about: [
         { "@type": "Thing", name: "GLSL shader extraction" },
         { "@type": "Thing", name: "Open-source software provenance" },
@@ -57,11 +66,12 @@ export default function AboutPage() {
       <SiteHeader />
 
       <main className="page-main">
+        <Breadcrumbs current="Method & Provenance" />
         <section className="about-hero" aria-labelledby="about-title">
           <div>
             <span className="eyebrow">Method / provenance / license</span>
             <h1 className="display-title" id="about-title">
-              Production shaders, made legible.
+              Production GLSL shaders, made legible.
             </h1>
           </div>
           <div>
@@ -88,6 +98,19 @@ export default function AboutPage() {
               <li><strong>Source units</strong><span>{shaderSourceUnits.length} original units</span></li>
               <li><strong>Status</strong><span>{activeCount} active · {archivedCount} archived</span></li>
               <li><strong>Languages</strong><span>TypeScript · GLSL</span></li>
+              <li><strong>Runtime</strong><span>Three.js {SITE_THREE_VERSION} · WebGL2</span></li>
+              <li>
+                <strong>Maintainer</strong>
+                <span>
+                  <a className="inline-link" href={SITE_MAINTAINER_URL} target="_blank" rel="noreferrer">
+                    {SITE_MAINTAINER_NAME}
+                  </a>
+                </span>
+              </li>
+              <li>
+                <strong>Verified</strong>
+                <span><time dateTime={SITE_UPDATED_DATE}>August 6, 2026</time></span>
+              </li>
             </ul>
           </section>
 
@@ -102,7 +125,11 @@ export default function AboutPage() {
               {shaderEffects.map((effect) => (
                 <li key={effect.id}>
                   <strong>{String(effect.index).padStart(2, "0")} · {effect.status}</strong>
-                  <span>{effect.name} / {effect.family}</span>
+                  <span>
+                    <a className="inline-link" href={`/effects/${effect.slug}`}>
+                      {effect.name} / {effect.family}
+                    </a>
+                  </span>
                 </li>
               ))}
             </ul>
@@ -114,7 +141,11 @@ export default function AboutPage() {
             <p>
               All source was read from artifact commit <code>{SITE_SOURCE_COMMIT}</code>. The manifest records
               each original path, inline symbol where applicable, shader stage, consuming effect,
-              extracted path, and SHA-256 digest.
+              extracted path, and SHA-256 digest. The{" "}
+              <a className="inline-link" href={SITE_MANIFEST_URL} target="_blank" rel="noreferrer">
+                machine-readable extraction manifest
+              </a>{" "}
+              makes the inventory independently reviewable.
             </p>
             <p>
               Shader equations, uniforms, default timing, colors, blending, and fog behavior are kept.
@@ -164,12 +195,15 @@ export default function AboutPage() {
               runtime lifecycle, and a useful non-WebGL fallback.
             </p>
             <p>
-              Start with <code>CONTRIBUTING.md</code> for local commands, shader extraction rules, testing,
-              and pull-request expectations. Shader editing and arbitrary uploaded code are deliberately
-              outside the v1 project.
+              Start with the{" "}
+              <a className="inline-link" href={SITE_CONTRIBUTING_URL} target="_blank" rel="noreferrer">
+                contribution guide
+              </a>{" "}
+              for local commands, shader extraction rules, testing, and pull-request expectations.
+              Shader editing and arbitrary uploaded code are deliberately outside the v1 project.
             </p>
-            <a className="text-link" href="/effects/aurora-field">
-              Open a documented effect <span aria-hidden="true">→</span>
+            <a className="text-link" href={SITE_GITHUB_URL} target="_blank" rel="noreferrer">
+              Inspect the GitHub source <span aria-hidden="true">↗</span>
             </a>
           </section>
         </div>

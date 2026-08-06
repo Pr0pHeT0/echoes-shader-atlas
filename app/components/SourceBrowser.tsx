@@ -14,9 +14,11 @@ export type DisplayShaderSource = {
 
 export function SourceBrowser({
   effectId,
+  heading,
   sources,
 }: {
   effectId: string;
+  heading: string;
   sources: DisplayShaderSource[];
 }) {
   const [activePath, setActivePath] = useState(sources[0]?.path ?? "");
@@ -59,7 +61,7 @@ export function SourceBrowser({
       <div className="source-browser__heading">
         <div>
           <span className="section-kicker">Extracted source</span>
-          <h2 id="source-heading">Read the actual shader.</h2>
+          <h2 id="source-heading">{heading}</h2>
         </div>
         <button className="copy-button" type="button" onClick={copySource}>
           {copyStatus === "copied" ? "Copied" : "Copy source"}

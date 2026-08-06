@@ -52,7 +52,8 @@ async function renderedHtml(pathname, expectedStatus = 200) {
 test("server-renders the complete classified atlas landing route", async () => {
   const html = await renderedHtml("/");
 
-  assert.match(html, /<title>Echoes Shader Atlas<\/title>/i);
+  assert.match(html, /<title>Open-Source Three\.js Shader Examples \| Echoes Shader Atlas<\/title>/i);
+  assert.match(html, /<h1[^>]*>\s*Open-source[\s\S]*Three\.js shaders\./i);
   assert.match(html, /Echoes Shader Atlas/i);
   assert.match(html, /<main\b/i);
   for (const effectId of EFFECT_IDS) {

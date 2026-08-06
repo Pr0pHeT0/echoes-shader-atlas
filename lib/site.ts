@@ -3,12 +3,20 @@ import type { Metadata } from "next";
 export const SITE_NAME = "Echoes Shader Atlas";
 export const SITE_URL = "https://shader.echoes.art";
 export const SITE_DESCRIPTION =
-  "Five production GLSL shader systems, extracted, classified, and rebuilt as open-source Three.js studies.";
+  "Explore five open-source Three.js shader examples with live WebGL2 demos and readable GLSL source: aurora, audio particles, type morphs, and GPGPU reveals.";
 export const SITE_SOCIAL_DESCRIPTION =
-  "A living visual index of production GLSL, particle systems, and GPGPU transitions.";
+  "Live Three.js and WebGL2 shader studies with readable GLSL source, interactive controls, and reproducible provenance.";
 export const SITE_GITHUB_URL = "https://github.com/Pr0pHeT0/echoes-shader-atlas";
+export const SITE_MAINTAINER_NAME = "Pr0pHeT0";
+export const SITE_MAINTAINER_URL = "https://github.com/Pr0pHeT0";
 export const SITE_LICENSE_URL = `${SITE_GITHUB_URL}/blob/main/LICENSE`;
+export const SITE_MANIFEST_URL = `${SITE_GITHUB_URL}/blob/main/data/extraction-manifest.json`;
+export const SITE_NOTICES_URL = `${SITE_GITHUB_URL}/blob/main/THIRD_PARTY_NOTICES.md`;
+export const SITE_CONTRIBUTING_URL = `${SITE_GITHUB_URL}/blob/main/CONTRIBUTING.md`;
 export const SITE_SOURCE_COMMIT = "d018f6d057c8f30144979bbcc95436cfb405d7c5";
+export const SITE_THREE_VERSION = "0.185.0";
+export const SITE_PUBLISHED_DATE = "2026-08-06";
+export const SITE_UPDATED_DATE = "2026-08-06";
 export const SITE_SOCIAL_IMAGE = `${SITE_URL}/og.png`;
 
 export const SITE_KEYWORDS = [
@@ -41,7 +49,7 @@ export function createPageMetadata({
   keywords = [],
 }: PageMetadataOptions): Metadata {
   const canonical = absoluteUrl(path);
-  const socialTitle = title ? `${title} — ${SITE_NAME}` : SITE_NAME;
+  const socialTitle = title ? `${title} | ${SITE_NAME}` : SITE_NAME;
 
   return {
     title: title ?? { absolute: SITE_NAME },

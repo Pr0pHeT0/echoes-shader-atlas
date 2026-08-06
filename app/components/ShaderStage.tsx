@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import * as THREE from "three";
-import { createEffectRuntime } from "@/lib/effects";
+import type { WebGLRenderer } from "three";
+import { createEffectRuntime } from "@/lib/effects/runtime-registry";
 import { ShaderStageController } from "@/lib/effects/stage-controller";
 import type { StageEnvironment, StageQuality } from "@/lib/effects/stage-controller";
-import type { AudioMetrics, EffectId } from "@/lib/effects";
+import type { AudioMetrics, EffectId } from "@/lib/effects/types";
 
 export type ShaderStageAudio = AudioMetrics;
 export type ShaderStageQuality = StageQuality;
@@ -66,45 +66,64 @@ export function ShaderStage({
     const host = hostRef.current;
     const canvas = canvasRef.current;
     if (!host || !canvas) return;
-    const initial = latestPropsRef.current;
-    mountedEffectRef.current = initial.effectId;
-    const controller = new ShaderStageController({
-      effectId: initial.effectId,
-      quality,
-      host,
-      canvas,
-      environment: createBrowserEnvironment(),
-      preset: initial.preset,
-      paused: initial.paused,
-      syntheticAudio: initial.syntheticAudio,
-      audio: initial.audio,
-      createRenderer: (stageCanvas, context, stageQuality) => {
-        const renderer = new THREE.WebGLRenderer({
-          canvas: stageCanvas as HTMLCanvasElement,
-          context: context as WebGL2RenderingContext,
-          antialias: stageQuality !== "low",
-          alpha: false,
-          powerPreference: "high-performance",
+    let cancelled = false;
+    let activeController: ShaderStageController | null = null;
+
+    // Let the static heading and copy paint before parsing Three.js and
+    // creating a GPU context. The shader remains the hero, but no longer
+    // blocks the page's first useful render on constrained devices.
+    const prepareTimer = window.setTimeout(() => {
+      void import("three").then((THREE) => {
+        if (cancelled) return;
+        const initial = latestPropsRef.current;
+        mountedEffectRef.current = initial.effectId;
+        const controller = new ShaderStageController({
+          effectId: initial.effectId,
+          quality,
+          host,
+          canvas,
+          environment: createBrowserEnvironment(),
+          preset: initial.preset,
+          paused: initial.paused,
+          syntheticAudio: initial.syntheticAudio,
+          audio: initial.audio,
+          createRenderer: (stageCanvas, context, stageQuality) => {
+            const renderer = new THREE.WebGLRenderer({
+              canvas: stageCanvas as HTMLCanvasElement,
+              context: context as WebGL2RenderingContext,
+              antialias: stageQuality !== "low",
+              alpha: false,
+              powerPreference: "high-performance",
+            });
+            renderer.outputColorSpace = THREE.SRGBColorSpace;
+            renderer.setClearColor(0x030506, 1);
+            return renderer;
+          },
+          createEffect: (id, context) => createEffectRuntime(id, {
+            ...context,
+            renderer: context.renderer as WebGLRenderer,
+          }),
+          onStatus: (status) => {
+            setLoading(status.loading);
+            setFailure(status.failure);
+          },
         });
-        renderer.outputColorSpace = THREE.SRGBColorSpace;
-        renderer.setClearColor(0x030506, 1);
-        return renderer;
-      },
-      createEffect: (id, context) => createEffectRuntime(id, {
-        ...context,
-        renderer: context.renderer as THREE.WebGLRenderer,
-      }),
-      onStatus: (status) => {
-        setLoading(status.loading);
-        setFailure(status.failure);
-      },
-    });
-    controllerRef.current = controller;
-    void controller.mount();
+        activeController = controller;
+        controllerRef.current = controller;
+        void controller.mount();
+      }).catch(() => {
+        if (!cancelled) {
+          setLoading(false);
+          setFailure("The WebGL runtime could not be loaded in this browser.");
+        }
+      });
+    }, 300);
 
     return () => {
+      cancelled = true;
+      window.clearTimeout(prepareTimer);
       controllerRef.current = null;
-      controller.dispose();
+      activeController?.dispose();
     };
   }, [quality]);
 

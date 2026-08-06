@@ -8,11 +8,6 @@ import { ShaderStage } from "./ShaderStage";
 
 const driverFilters = ["all", "Pointer", "Synthetic level", "Reveal progress"] as const;
 
-function titleParts(name: string): [string, string] {
-  const words = name.split(" ");
-  return [words.slice(0, -1).join(" "), words.at(-1) ?? name];
-}
-
 export function HomeGallery() {
   const [selectedId, setSelectedId] = useState<EffectId>(shaderEffects[0].id);
   const [family, setFamily] = useState<EffectFamily | "all">("all");
@@ -30,8 +25,6 @@ export function HomeGallery() {
     }),
     [driver, family, status],
   );
-  const [titleLead, titleEnd] = titleParts(selected.name);
-
   function selectEffect(effectId: EffectId) {
     setSelectedId(effectId);
     trackEvent("effect_select", { effect_id: effectId, placement: "home_reel" });
@@ -71,9 +64,17 @@ export function HomeGallery() {
               {selected.status === "archived" ? <span>Recovered system</span> : null}
             </div>
             <h1 className="hero-title" id="hero-title">
-              {titleLead} <span>{titleEnd}</span>
+              Open-source <span>Three.js shaders.</span>
             </h1>
-            <p className="hero-summary">{selected.summary}</p>
+            <div className="hero-study-heading" aria-live="polite">
+              <span>Featured study</span>
+              <h2>{selected.name}</h2>
+            </div>
+            <p className="hero-summary">
+              Explore five production shader systems rebuilt as live WebGL2 studies, with readable
+              GLSL source, interactive controls, reproducible provenance, and MIT-licensed project
+              code. Now viewing: {selected.summary}
+            </p>
             <div className="hero-actions">
               <a
                 className="primary-link"
@@ -83,7 +84,7 @@ export function HomeGallery() {
                   placement: "home_hero",
                 })}
               >
-                Explore the system <span aria-hidden="true">↗</span>
+                Explore {selected.shortName} <span aria-hidden="true">↗</span>
               </a>
               <button className="ghost-button" type="button" onClick={togglePlayback}>
                 {paused ? "Resume motion" : "Pause motion"}
@@ -117,7 +118,7 @@ export function HomeGallery() {
         <div className="catalog-heading">
           <div>
             <span className="section-kicker">Classified index</span>
-            <h2 id="catalog-title">Five systems.<br />No black boxes.</h2>
+            <h2 id="catalog-title">Five open-source shader examples.<br />No black boxes.</h2>
           </div>
           <p>
             Every entry maps a production visual back to its render primitive, input signal,
@@ -190,7 +191,7 @@ export function HomeGallery() {
                     placement: "catalog_card",
                   })}
                 >
-                  Open study <span aria-hidden="true">→</span>
+                  Open {effect.shortName} shader study <span aria-hidden="true">→</span>
                 </a>
               </div>
             </article>

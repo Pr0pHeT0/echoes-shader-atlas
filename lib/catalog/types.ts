@@ -35,6 +35,23 @@ export interface EffectStat {
   value: string;
 }
 
+export interface EffectWorkflowStep {
+  title: string;
+  description: string;
+}
+
+export interface EffectSeoMeta {
+  title: string;
+  description: string;
+  primaryKeyword: string;
+  headingQualifier: string;
+  anatomyHeading: string;
+  sourceHeading: string;
+  adaptation: string;
+  workflow: readonly EffectWorkflowStep[];
+  relatedEffectIds: readonly EffectId[];
+}
+
 export interface ShaderSourceUnit {
   id: string;
   label: string;
@@ -63,6 +80,7 @@ export interface ShaderEffectMeta {
   eyebrow: string;
   summary: string;
   description: string;
+  seo: EffectSeoMeta;
   drivers: readonly string[];
   techniques: readonly string[];
   primitives: readonly string[];

@@ -7,6 +7,7 @@ import { shaderEffects } from "@/lib/catalog/effects";
 import { createPageMetadata, SITE_DESCRIPTION, SITE_URL } from "@/lib/site";
 
 export const metadata: Metadata = createPageMetadata({
+  title: "Open-Source Three.js Shader Examples",
   path: "/",
   description: SITE_DESCRIPTION,
   keywords: ["shader gallery", "Three.js examples", "WebGL demos"],
@@ -20,6 +21,7 @@ const collectionStructuredData = {
       "@id": `${SITE_URL}/#collection`,
       url: `${SITE_URL}/`,
       name: "Echoes Shader Atlas",
+      headline: "Open-source Three.js shaders, made legible.",
       description: SITE_DESCRIPTION,
       inLanguage: "en",
       isPartOf: { "@id": `${SITE_URL}/#website` },
@@ -37,7 +39,7 @@ const collectionStructuredData = {
         position: effect.index,
         url: `${SITE_URL}/effects/${effect.slug}`,
         name: effect.name,
-        description: effect.summary,
+        description: effect.seo.description,
       })),
     },
   ],

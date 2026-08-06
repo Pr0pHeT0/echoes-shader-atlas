@@ -3,7 +3,7 @@ import { SITE_GITHUB_URL } from "@/lib/site";
 export function SiteHeader({ floating = false }: { floating?: boolean }) {
   return (
     <header className={`site-header${floating ? " site-header--floating" : ""}`}>
-      <a className="wordmark" href="/" aria-label="Echoes Shader Atlas home">
+      <a className="wordmark" href="/">
         <span className="wordmark-mark" aria-hidden="true">
           E/
         </span>

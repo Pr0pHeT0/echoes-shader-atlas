@@ -6,9 +6,12 @@ import {
   CONSTRAINED_PARTICLE_COUNT,
   FULL_PARTICLE_COUNT,
   MAX_DPR,
+  MATERIALIZATION_POINT_SIZE_MAX,
+  MATERIALIZATION_POINT_SIZE_MIN,
   clampAudio,
   clampDpr,
   disposeObjectTree,
+  resolveMaterializationPointSize,
   resolveParticleCount,
   syntheticAudio,
 } from "../lib/effects/runtime-utils.ts";
@@ -26,6 +29,19 @@ test("caps pixel density and particle budgets for both quality profiles", () => 
   );
   assert.equal(resolveParticleCount({ particleCount: 8_192.9, reducedMotion: false }), 8_192);
   assert.equal(resolveParticleCount({ particleCount: -1, reducedMotion: false }), 1_024);
+});
+
+test("materialization point size decreases deterministically with model complexity", () => {
+  const simple = resolveMaterializationPointSize(12, 1);
+  const detailed = resolveMaterializationPointSize(25_000, 12);
+  const maximum = resolveMaterializationPointSize(1_000_000, 512);
+
+  assert.ok(simple > detailed);
+  assert.ok(detailed > maximum);
+  assert.equal(maximum, MATERIALIZATION_POINT_SIZE_MIN);
+  assert.equal(resolveMaterializationPointSize(0, 0), MATERIALIZATION_POINT_SIZE_MAX);
+  assert.equal(resolveMaterializationPointSize(Number.NaN, Number.POSITIVE_INFINITY), MATERIALIZATION_POINT_SIZE_MAX);
+  assert.equal(resolveMaterializationPointSize(25_000, 12), detailed);
 });
 
 test("synthetic audio is deterministic, bounded, and accepts manual overrides", () => {

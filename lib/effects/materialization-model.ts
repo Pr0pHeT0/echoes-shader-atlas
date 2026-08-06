@@ -1,5 +1,6 @@
 import type {
   BufferAttribute,
+  Color,
   InterleavedBufferAttribute,
   Mesh,
   Object3D,
@@ -74,6 +75,12 @@ interface GlbNode {
   extensions?: Record<string, unknown>;
 }
 
+interface GlbMaterial {
+  pbrMetallicRoughness?: {
+    baseColorFactor?: number[];
+  };
+}
+
 interface GlbDocument {
   asset?: { version?: string };
   accessors?: GlbAccessor[];
@@ -86,7 +93,7 @@ interface GlbDocument {
   animations?: unknown[];
   cameras?: unknown[];
   extensions?: Record<string, unknown>;
-  materials?: unknown[];
+  materials?: GlbMaterial[];
   samplers?: unknown[];
   skins?: unknown[];
   textures?: unknown[];
@@ -105,6 +112,7 @@ interface SampleSurface {
   color: GeometryAttribute | null;
   index: BufferAttribute | null;
   triangleIndices: Uint32Array;
+  triangleBaseColors: Float32Array;
   cumulativeAreas: Float64Array;
   startArea: number;
   area: number;
@@ -206,18 +214,34 @@ function inspectDocument(document: GlbDocument): void {
   }
 }
 
-function createGeometryOnlyGlb(parsed: ParsedGlb): ArrayBuffer {
+function sanitizedBaseColorFactor(material: GlbMaterial | undefined): [number, number, number, number] {
+  const source = material?.pbrMetallicRoughness?.baseColorFactor;
+  if (!Array.isArray(source) || source.length < 3) return [1, 1, 1, 1];
+  const channel = (index: number, fallback: number) => {
+    const value = Number(source[index]);
+    return Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : fallback;
+  };
+  return [channel(0, 1), channel(1, 1), channel(2, 1), channel(3, 1)];
+}
+
+function createSafeGeometryGlb(parsed: ParsedGlb): ArrayBuffer {
   const document = JSON.parse(JSON.stringify(parsed.document)) as GlbDocument;
   delete document.images;
   delete document.textures;
   delete document.samplers;
-  delete document.materials;
   delete document.animations;
   delete document.cameras;
   delete document.skins;
   delete document.extensions;
   document.extensionsUsed = [];
   document.extensionsRequired = [];
+  document.materials = (document.materials ?? []).map((material) => ({
+    pbrMetallicRoughness: {
+      baseColorFactor: sanitizedBaseColorFactor(material),
+      metallicFactor: 0,
+      roughnessFactor: 1,
+    },
+  }));
   for (const node of document.nodes ?? []) {
     delete node.camera;
     delete node.skin;
@@ -225,7 +249,14 @@ function createGeometryOnlyGlb(parsed: ParsedGlb): ArrayBuffer {
   }
   for (const mesh of document.meshes ?? []) {
     for (const primitive of mesh.primitives ?? []) {
-      delete primitive.material;
+      if (
+        primitive.material === undefined
+        || !Number.isInteger(primitive.material)
+        || primitive.material < 0
+        || primitive.material >= (document.materials?.length ?? 0)
+      ) {
+        delete primitive.material;
+      }
       delete primitive.targets;
       delete primitive.extensions;
     }
@@ -252,6 +283,35 @@ function createGeometryOnlyGlb(parsed: ParsedGlb): ArrayBuffer {
     outputBytes.set(parsed.binaryChunk, binaryHeaderOffset + 8);
   }
   return output;
+}
+
+function readMaterialColor(material: unknown, target: Color): Color {
+  const candidate = material as { color?: { r?: unknown; g?: unknown; b?: unknown } } | undefined;
+  const r = Number(candidate?.color?.r);
+  const g = Number(candidate?.color?.g);
+  const b = Number(candidate?.color?.b);
+  target.setRGB(
+    Number.isFinite(r) ? Math.min(1, Math.max(0, r)) : 1,
+    Number.isFinite(g) ? Math.min(1, Math.max(0, g)) : 1,
+    Number.isFinite(b) ? Math.min(1, Math.max(0, b)) : 1,
+  );
+  return target;
+}
+
+function readTriangleBaseColor(
+  materials: readonly unknown[],
+  groups: readonly { start: number; count: number; materialIndex?: number }[],
+  drawOffset: number,
+  target: Color,
+): Color {
+  let materialIndex = 0;
+  if (materials.length > 1) {
+    const group = groups.find(
+      (candidate) => drawOffset >= candidate.start && drawOffset < candidate.start + candidate.count,
+    );
+    materialIndex = group?.materialIndex ?? 0;
+  }
+  return readMaterialColor(materials[materialIndex] ?? materials[0], target);
 }
 
 function mulberry32(seed: number): () => number {
@@ -326,7 +386,7 @@ export async function createMaterializationPointCloudFromGlb(
   }
   const parsed = parseGlb(arrayBuffer);
   inspectDocument(parsed.document);
-  const geometryOnlyGlb = createGeometryOnlyGlb(parsed);
+  const safeGeometryGlb = createSafeGeometryGlb(parsed);
   const [{ GLTFLoader }, THREE] = await Promise.all([
     import("three/addons/loaders/GLTFLoader.js"),
     import("three"),
@@ -334,7 +394,7 @@ export async function createMaterializationPointCloudFromGlb(
 
   let scene: Object3D | null = null;
   try {
-    const gltf = await new GLTFLoader().parseAsync(geometryOnlyGlb, "");
+    const gltf = await new GLTFLoader().parseAsync(safeGeometryGlb, "");
     scene = gltf.scene;
     scene.updateMatrixWorld(true);
     const surfaces: SampleSurface[] = [];
@@ -343,8 +403,10 @@ export async function createMaterializationPointCloudFromGlb(
     const vertexC = new THREE.Vector3();
     const edgeA = new THREE.Vector3();
     const edgeB = new THREE.Vector3();
+    const baseColor = new THREE.Color();
     const bounds = new THREE.Box3();
     let totalArea = 0;
+    let decodedTriangleCount = 0;
     let triangleCount = 0;
     let meshCount = 0;
 
@@ -354,10 +416,13 @@ export async function createMaterializationPointCloudFromGlb(
       const position = mesh.geometry.getAttribute("position") as GeometryAttribute | undefined;
       if (!position || position.itemSize < 3) return;
       const index = mesh.geometry.getIndex();
+      const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      const hasSingleMaterial = materials.length <= 1;
+      if (hasSingleMaterial) readMaterialColor(materials[0], baseColor);
       const rawTriangleCount = Math.floor((index?.count ?? position.count) / 3);
       if (rawTriangleCount < 1) return;
-      triangleCount += rawTriangleCount;
-      if (triangleCount > MATERIALIZATION_MODEL_MAX_TRIANGLES) {
+      decodedTriangleCount += rawTriangleCount;
+      if (decodedTriangleCount > MATERIALIZATION_MODEL_MAX_TRIANGLES) {
         fail(
           "complexity",
           "This model is too complex to prepare safely in the browser. Export a lighter static GLB and try again.",
@@ -365,6 +430,7 @@ export async function createMaterializationPointCloudFromGlb(
       }
 
       const validTriangles: number[] = [];
+      const triangleBaseColors: number[] = [];
       const cumulativeAreas: number[] = [];
       let surfaceArea = 0;
       for (let triangle = 0; triangle < rawTriangleCount; triangle += 1) {
@@ -389,15 +455,21 @@ export async function createMaterializationPointCloudFromGlb(
         if (area <= 1e-12) continue;
         surfaceArea += area;
         validTriangles.push(triangle);
+        if (!hasSingleMaterial) {
+          readTriangleBaseColor(materials, mesh.geometry.groups, triangle * 3, baseColor);
+        }
+        triangleBaseColors.push(baseColor.r, baseColor.g, baseColor.b);
         cumulativeAreas.push(surfaceArea);
       }
       if (surfaceArea <= 0) return;
+      triangleCount += validTriangles.length;
       surfaces.push({
         mesh,
         position,
         color: (mesh.geometry.getAttribute("color") as GeometryAttribute | undefined) ?? null,
         index,
         triangleIndices: new Uint32Array(validTriangles),
+        triangleBaseColors: new Float32Array(triangleBaseColors),
         cumulativeAreas: new Float64Array(cumulativeAreas),
         startArea: totalArea,
         area: surfaceArea,
@@ -424,11 +496,8 @@ export async function createMaterializationPointCloudFromGlb(
     const colors = new Float32Array(safePointCount * 3);
     const sections = new Float32Array(safePointCount);
     const random = mulberry32(0xe0c0e5);
-    const cyan = new THREE.Color(0x24dcff);
-    const violet = new THREE.Color(0x805cff);
-    const pearl = new THREE.Color(0xeafaff);
-    const palette = new THREE.Color();
     const sampledColor = new THREE.Color();
+    const vertexColor = new THREE.Color();
     const yRange = Math.max(size.y, 1e-9);
 
     for (let point = 0; point < safePointCount; point += 1) {
@@ -465,19 +534,23 @@ export async function createMaterializationPointCloudFromGlb(
       positions[offset + 2] = (worldZ - center.z) * scale;
       const yProgress = THREE.MathUtils.clamp((worldY - bounds.min.y) / yRange, 0, 1);
       sections[point] = Math.min(3, Math.floor(yProgress * 4));
-      palette.copy(cyan).lerp(violet, yProgress).lerp(pearl, 0.08 + yProgress * 0.08);
+      const colorOffset = triangleOffset * 3;
+      sampledColor.setRGB(
+        surface.triangleBaseColors[colorOffset],
+        surface.triangleBaseColors[colorOffset + 1],
+        surface.triangleBaseColors[colorOffset + 2],
+      );
       if (surface.color && surface.color.itemSize >= 3) {
-        sampledColor.setRGB(
+        vertexColor.setRGB(
           surface.color.getX(a) * weightA + surface.color.getX(b) * weightB + surface.color.getX(c) * weightC,
           surface.color.getY(a) * weightA + surface.color.getY(b) * weightB + surface.color.getY(c) * weightC,
           surface.color.getZ(a) * weightA + surface.color.getZ(b) * weightB + surface.color.getZ(c) * weightC,
-        ).lerp(palette, 0.22);
-      } else {
-        sampledColor.copy(palette);
+        );
+        sampledColor.multiply(vertexColor);
       }
-      colors[offset] = sampledColor.r;
-      colors[offset + 1] = sampledColor.g;
-      colors[offset + 2] = sampledColor.b;
+      colors[offset] = THREE.MathUtils.clamp(sampledColor.r, 0, 1);
+      colors[offset + 1] = THREE.MathUtils.clamp(sampledColor.g, 0, 1);
+      colors[offset + 2] = THREE.MathUtils.clamp(sampledColor.b, 0, 1);
     }
 
     return {

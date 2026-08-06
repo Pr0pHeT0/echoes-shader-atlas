@@ -119,7 +119,8 @@ export default function AboutPage() {
             <h2 id="taxonomy-heading">One primary family per system.</h2>
             <p>
               Families describe the dominant visual behavior. Drivers and techniques remain separate,
-              so an audio-reactive flow field is searchable by what moves it and how it is built.
+              so a local GLB point cloud is searchable by its geometry input, vertex-color mapping,
+              model complexity, and GPGPU flow.
             </p>
             <ul className="metadata-list">
               {shaderEffects.map((effect) => (
@@ -160,17 +161,20 @@ export default function AboutPage() {
             <p>
               The source PLY terrain and GLB pendant are intentionally not redistributed because their
               reuse terms were not documented. Orb-to-Scene Reveal uses deterministic seeded terrain;
-              Materialization uses a segmented torus knot.
+              Point-Cloud Materialization uses a segmented torus knot.
             </p>
             <p>
               The materialization study also accepts an optional self-contained GLB as a temporary local
-              point target. Model data is processed only in browser memory, is never uploaded or stored,
-              and disappears when the page is refreshed or closed.
+              point target. RGB vertex colors and base-material colors carry into the particles, while a
+              bounded complexity curve makes dense models use finer points. Model data is processed only
+              in browser memory, is never uploaded or stored, and disappears when the page is refreshed
+              or closed.
             </p>
             <p>
-              Synthetic audio drives all reactive demonstrations, so the site never asks for microphone
-              access or ships recordings. The particle title changes only its copy, from the original
-              product wordmark to the neutral word ECHOES.
+              Audio-specific studies use synthetic signals, so the site never asks for microphone access
+              or ships recordings. Point-Cloud Materialization is model-driven and does not use an audio
+              signal. The particle title changes only its copy, from the original product wordmark to the
+              neutral word ECHOES.
             </p>
           </section>
 

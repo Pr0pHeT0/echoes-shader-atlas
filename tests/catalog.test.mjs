@@ -95,6 +95,14 @@ test("catalog lookup, filters, and JSON serialization are deterministic", async 
     filterShaderEffects({ driver: "pointer" }).map((effect) => effect.id),
     ["morphing-echoes-title"],
   );
+  assert.deepEqual(
+    filterShaderEffects({ driver: "local geometry" }).map((effect) => effect.id),
+    ["audio-reactive-materialization"],
+  );
+  assert.equal(
+    getEffectBySlug("audio-reactive-materialization")?.drivers.some((driver) => driver.startsWith("Synthetic")),
+    false,
+  );
 
   const serialized = JSON.stringify(shaderEffects);
   assert.deepEqual(JSON.parse(serialized), shaderEffects);

@@ -54,7 +54,7 @@ export const effectShaderSources: Record<EffectId, EffectShaderSource[]> = {
     sharedSimplex,
   ],
   "audio-reactive-materialization": [
-    source("Audio flow", "compute", "lib/shaders/materialization/materialization.compute.glsl", materializationCompute),
+    source("GPGPU flow", "compute", "lib/shaders/materialization/materialization.compute.glsl", materializationCompute),
     source("Materialization", "vertex", "lib/shaders/materialization/materialization.vert.glsl", materializationVertex),
     source("Materialization", "fragment", "lib/shaders/materialization/materialization.frag.glsl", materializationFragment),
     sharedSimplex,

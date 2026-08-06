@@ -62,6 +62,67 @@ function makeTwoNodeTriangleGlb() {
   }, new Uint8Array(positions.buffer));
 }
 
+function makeColoredTriangleGlb({ baseColorFactor, vertexColor = null }) {
+  const positions = new Float32Array([
+    0, 0, 0,
+    1, 0, 0,
+    0, 1, 0,
+  ]);
+  const colors = vertexColor
+    ? new Float32Array([...vertexColor, ...vertexColor, ...vertexColor])
+    : null;
+  const binary = new Uint8Array(positions.byteLength + (colors?.byteLength ?? 0));
+  binary.set(new Uint8Array(positions.buffer), 0);
+  if (colors) binary.set(new Uint8Array(colors.buffer), positions.byteLength);
+
+  const bufferViews = [{ buffer: 0, byteOffset: 0, byteLength: positions.byteLength }];
+  const accessors = [{
+    bufferView: 0,
+    componentType: 5126,
+    count: 3,
+    type: "VEC3",
+    min: [0, 0, 0],
+    max: [1, 1, 0],
+  }];
+  const attributes = { POSITION: 0 };
+  if (colors) {
+    bufferViews.push({
+      buffer: 0,
+      byteOffset: positions.byteLength,
+      byteLength: colors.byteLength,
+    });
+    accessors.push({
+      bufferView: 1,
+      componentType: 5126,
+      count: 3,
+      type: "VEC3",
+      min: [0, 0, 0],
+      max: [1, 1, 1],
+    });
+    attributes.COLOR_0 = 1;
+  }
+
+  return makeGlb({
+    asset: { version: "2.0" },
+    buffers: [{ byteLength: binary.byteLength }],
+    bufferViews,
+    accessors,
+    materials: [{ pbrMetallicRoughness: { baseColorFactor } }],
+    meshes: [{ primitives: [{ attributes, material: 0, mode: 4 }] }],
+    nodes: [{ mesh: 0 }],
+    scenes: [{ nodes: [0] }],
+    scene: 0,
+  }, binary);
+}
+
+function assertColor(pointCloud, expected, tolerance = 1e-6) {
+  for (let index = 0; index < pointCloud.colors.length; index += 3) {
+    assert.ok(Math.abs(pointCloud.colors[index] - expected[0]) <= tolerance);
+    assert.ok(Math.abs(pointCloud.colors[index + 1] - expected[1]) <= tolerance);
+    assert.ok(Math.abs(pointCloud.colors[index + 2] - expected[2]) <= tolerance);
+  }
+}
+
 test("GLB geometry is sampled deterministically, normalized, and divided into four sections", async () => {
   const glb = makeTwoNodeTriangleGlb();
   const first = await createMaterializationPointCloudFromGlb(glb, 4_096);
@@ -75,6 +136,7 @@ test("GLB geometry is sampled deterministically, normalized, and divided into fo
   assert.deepEqual(first.sections, second.sections);
   assert.ok([...first.positions].every(Number.isFinite));
   assert.ok([...first.colors].every((value) => Number.isFinite(value) && value >= 0 && value <= 1));
+  assertColor(first, [1, 1, 1]);
   assert.deepEqual([...new Set(first.sections)].sort(), [0, 1, 2, 3]);
   assert.deepEqual([...new Set(first.sections.slice(0, 1_024))].sort(), [0, 1, 2, 3]);
 
@@ -86,6 +148,23 @@ test("GLB geometry is sampled deterministically, normalized, and divided into fo
   }
   assert.ok(Math.max(...xs) - Math.min(...xs) > 3.6, "world transforms contribute to normalized bounds");
   assert.ok(Math.max(...ys) - Math.min(...ys) < 1.4, "uniform scale preserves the source aspect ratio");
+});
+
+test("GLB points preserve base-material color and multiply interpolated RGB vertex color", async () => {
+  const materialOnly = await createMaterializationPointCloudFromGlb(
+    makeColoredTriangleGlb({ baseColorFactor: [0.2, 0.3, 0.4, 1] }),
+    64,
+  );
+  assertColor(materialOnly, [0.2, 0.3, 0.4]);
+
+  const vertexAndMaterial = await createMaterializationPointCloudFromGlb(
+    makeColoredTriangleGlb({
+      baseColorFactor: [0.4, 0.8, 0.5, 1],
+      vertexColor: [0.5, 0.25, 1],
+    }),
+    64,
+  );
+  assertColor(vertexAndMaterial, [0.2, 0.2, 0.5]);
 });
 
 test("the importer rejects external resources and unsupported geometry compression before parsing", async () => {

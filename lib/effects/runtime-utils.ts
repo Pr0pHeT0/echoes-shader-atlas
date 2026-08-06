@@ -5,6 +5,8 @@ import type { AudioMetrics, EffectRuntimeContext } from "./types";
 export const CONSTRAINED_PARTICLE_COUNT = 16_384;
 export const FULL_PARTICLE_COUNT = 65_536;
 export const MAX_DPR = 1.5;
+export const MATERIALIZATION_POINT_SIZE_MIN = 0.028;
+export const MATERIALIZATION_POINT_SIZE_MAX = 0.07;
 
 export function clampDpr(dpr: number): number {
   return THREE.MathUtils.clamp(Number.isFinite(dpr) ? dpr : 1, 0.5, MAX_DPR);
@@ -14,6 +16,35 @@ export function resolveParticleCount(context: Pick<EffectRuntimeContext, "partic
   const cap = context.reducedMotion ? CONSTRAINED_PARTICLE_COUNT : FULL_PARTICLE_COUNT;
   const requested = Number.isFinite(context.particleCount) ? Math.floor(context.particleCount) : cap;
   return THREE.MathUtils.clamp(requested, 1_024, cap);
+}
+
+/**
+ * Keeps dense imported models legible without letting simple models become pinpricks.
+ * The logarithmic curve reacts to both surface detail and multi-mesh scene complexity.
+ */
+export function resolveMaterializationPointSize(triangleCount: number, meshCount: number): number {
+  const safeTriangles = THREE.MathUtils.clamp(
+    Number.isFinite(triangleCount) ? Math.max(0, Math.floor(triangleCount)) : 0,
+    0,
+    1_000_000,
+  );
+  const safeMeshes = THREE.MathUtils.clamp(
+    Number.isFinite(meshCount) ? Math.max(0, Math.floor(meshCount)) : 0,
+    0,
+    512,
+  );
+  const triangleComplexity = Math.log10(1 + safeTriangles) / Math.log10(1_000_001);
+  const meshComplexity = Math.log10(1 + safeMeshes) / Math.log10(513);
+  const complexity = THREE.MathUtils.clamp(
+    triangleComplexity * 0.84 + meshComplexity * 0.16,
+    0,
+    1,
+  );
+  return THREE.MathUtils.lerp(
+    MATERIALIZATION_POINT_SIZE_MAX,
+    MATERIALIZATION_POINT_SIZE_MIN,
+    complexity,
+  );
 }
 
 export function clampAudio(audio: Partial<AudioMetrics> | null | undefined): AudioMetrics {

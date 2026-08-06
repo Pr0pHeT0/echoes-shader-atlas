@@ -7,7 +7,7 @@ import { trackEvent } from "@/lib/analytics";
 import { SITE_GITHUB_URL } from "@/lib/site";
 import { ShaderStage } from "./ShaderStage";
 
-const driverFilters = ["all", "Pointer", "Synthetic level", "Reveal progress"] as const;
+const driverFilters = ["all", "Pointer", "Synthetic level", "Reveal progress", "Local geometry"] as const;
 
 export function HomeGallery() {
   const [selectedId, setSelectedId] = useState<EffectId>(shaderEffects[0].id);
@@ -30,7 +30,7 @@ export function HomeGallery() {
     trackEvent("effect_select", { effect_id: effectId, placement: "home_reel" });
   }
 
-  function setCatalogFilter(filterType: "family" | "signal" | "state", value: string) {
+  function setCatalogFilter(filterType: "family" | "driver" | "state", value: string) {
     trackEvent("catalog_filter", { filter_type: filterType, filter_value: value });
   }
 
@@ -40,7 +40,7 @@ export function HomeGallery() {
         <ShaderStage
           effectId={selected.id}
           preset={selected.presets[0]?.id}
-          syntheticAudio
+          syntheticAudio={selected.drivers.some((driverName) => driverName.startsWith("Synthetic"))}
           label={`${selected.name} live shader preview`}
         />
         <div className="hero-grid" aria-hidden="true" />
@@ -126,11 +126,11 @@ export function HomeGallery() {
               </FilterButton>
             ))}
           </FilterRow>
-          <FilterRow label="Signal">
+          <FilterRow label="Driver">
             {driverFilters.map((value) => (
               <FilterButton key={value} active={driver === value} onClick={() => {
                 setDriver(value);
-                setCatalogFilter("signal", value);
+                setCatalogFilter("driver", value);
               }}>
                 {value === "all" ? "All" : value}
               </FilterButton>

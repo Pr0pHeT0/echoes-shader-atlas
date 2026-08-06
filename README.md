@@ -18,7 +18,7 @@ loaded unless a visitor explicitly accepts.
 | Voice Wave Particles | Audio Visualization | Synthetic level, bass, mid, treble | Active |
 | Morphing Echoes Title | Particle Typography | Time, pointer, font phase, preset state | Active |
 | Orb-to-Scene Reveal | Point-cloud Transition | Time, reveal progress, particle lifetime | Active |
-| Audio-Reactive Materialization | GPGPU Materialization | Time, synthetic audio, section count | Archived, fully demonstrated |
+| Point-Cloud Materialization | GPGPU Materialization | Time, local geometry, vertex color, model complexity | Archived, fully demonstrated |
 
 ## Quick start
 
@@ -114,14 +114,16 @@ The original PLY and GLB files are not redistributed because their reuse terms w
 Their role is replaced, not imitated:
 
 - Orb-to-Scene Reveal targets deterministic seeded terrain.
-- Audio-Reactive Materialization targets a segmented torus knot.
+- Point-Cloud Materialization targets a segmented torus knot.
 
 Visitors may temporarily replace that torus knot with their own self-contained GLB. The importer reads
-only bounded triangle geometry, samples it into the existing particle budget, does not transmit or store
-the file, and restores the procedural target on refresh or navigation.
+only bounded triangle geometry, samples it into the existing particle budget, multiplies interpolated RGB
+vertex colors by each mesh's base-material color, and adapts point size to valid triangle and mesh counts.
+It does not transmit or store the file and restores the procedural target on refresh or navigation.
 
-All audio-reactive effects use generated control signals. The site never requests microphone access and
-does not include the source project's recordings, screenshots, models, or product branding.
+Audio-specific effects use generated control signals; Point-Cloud Materialization is model-driven and has
+no audio control path. The site never requests microphone access and does not include the source project's
+recordings, screenshots, models, or product branding.
 
 ## Rendering and accessibility
 

@@ -7,9 +7,13 @@ import vertexShader from "../../shaders/materialization/materialization.vert.gls
 import { composeShader } from "../../shaders/compose";
 import { createSegmentedTorusKnot, seededValue } from "../geometry";
 import { EFFECT_PRESETS, MATERIALIZATION_DEFAULTS } from "../runtime-config";
-import { clampDpr, makeShowcaseScene, resolveParticleCount, syntheticAudio } from "../runtime-utils";
+import {
+  clampDpr,
+  makeShowcaseScene,
+  resolveMaterializationPointSize,
+  resolveParticleCount,
+} from "../runtime-utils";
 import type {
-  AudioMetrics,
   EffectFrame,
   EffectInstance,
   EffectRuntimeContext,
@@ -121,19 +125,19 @@ class MaterializationRuntime implements EffectInstance {
     computeUniforms.uTreble = { value: 0 };
     computeUniforms.uShaderEnabled = { value: 1 };
     computeUniforms.uFlowEnabled = { value: 1 };
-    computeUniforms.uMidFlowTimeEnabled = { value: 1 };
+    computeUniforms.uMidFlowTimeEnabled = { value: 0 };
     computeUniforms.uMidFlowTimeStrength = { value: MATERIALIZATION_DEFAULTS.midFlowTimeStrength };
-    computeUniforms.uBassFlowInfluenceEnabled = { value: 1 };
+    computeUniforms.uBassFlowInfluenceEnabled = { value: 0 };
     computeUniforms.uBassFlowInfluenceStrength = { value: MATERIALIZATION_DEFAULTS.bassFlowInfluenceStrength };
-    computeUniforms.uTrebleFlowFrequencyEnabled = { value: 1 };
+    computeUniforms.uTrebleFlowFrequencyEnabled = { value: 0 };
     computeUniforms.uTrebleFlowFrequencyStrength = { value: MATERIALIZATION_DEFAULTS.trebleFlowFrequencyStrength };
-    computeUniforms.uAudioGateEnabled = { value: 1 };
+    computeUniforms.uAudioGateEnabled = { value: 0 };
     computeUniforms.uAudioGateLow = { value: MATERIALIZATION_DEFAULTS.audioGateLow };
     computeUniforms.uAudioGateHigh = { value: MATERIALIZATION_DEFAULTS.audioGateHigh };
     computeUniforms.uAudioGateBassMix = { value: MATERIALIZATION_DEFAULTS.audioGateBassMix };
-    computeUniforms.uBassFlowStrengthEnabled = { value: 1 };
+    computeUniforms.uBassFlowStrengthEnabled = { value: 0 };
     computeUniforms.uBassFlowStrength = { value: MATERIALIZATION_DEFAULTS.bassFlowStrength };
-    computeUniforms.uAudioFlowEnabled = { value: 1 };
+    computeUniforms.uAudioFlowEnabled = { value: 0 };
     computeUniforms.uAudioFlowStrength = { value: MATERIALIZATION_DEFAULTS.audioFlowStrength };
     computeUniforms.uReturnEnabled = { value: 1 };
     computeUniforms.uReturnStrength = { value: MATERIALIZATION_DEFAULTS.returnStrength };
@@ -158,12 +162,15 @@ class MaterializationRuntime implements EffectInstance {
     this.geometry.setAttribute("aSize", new THREE.BufferAttribute(sizes, 1));
     this.geometry.setAttribute("aSection", new THREE.BufferAttribute(targetSections, 1));
     const dpr = clampDpr(context.dpr);
+    const pointSize = uploaded
+      ? resolveMaterializationPointSize(uploaded.triangleCount, uploaded.meshCount)
+      : MATERIALIZATION_DEFAULTS.size;
     this.material = new THREE.ShaderMaterial({
       vertexShader,
       fragmentShader,
       uniforms: {
         ...THREE.UniformsLib.fog,
-        uSize: { value: MATERIALIZATION_DEFAULTS.size },
+        uSize: { value: pointSize },
         uResolution: { value: new THREE.Vector2(context.width * dpr, context.height * dpr) },
         uParticlesTexture: { value: this.gpgpu.getCurrentRenderTarget(this.particlesVariable).texture },
         uMaterializedSectionCount: { value: 0 },
@@ -172,10 +179,10 @@ class MaterializationRuntime implements EffectInstance {
         uMid: { value: 0 },
         uTreble: { value: 0 },
         uShaderEnabled: { value: 1 },
-        uBassRadialEnabled: { value: 1 },
+        uBassRadialEnabled: { value: 0 },
         uBassRadialPhase: { value: MATERIALIZATION_DEFAULTS.bassRadialPhase },
         uBassRadialStrength: { value: MATERIALIZATION_DEFAULTS.bassRadialStrength },
-        uTrebleSizeEnabled: { value: 1 },
+        uTrebleSizeEnabled: { value: 0 },
         uTrebleSizeStrength: { value: MATERIALIZATION_DEFAULTS.trebleSizeStrength },
       },
       transparent: true,
@@ -208,7 +215,7 @@ class MaterializationRuntime implements EffectInstance {
         geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
         geometry.setAttribute("color", new THREE.Float32BufferAttribute(sectionColors[index], 3));
         const material = new THREE.PointsMaterial({
-          size: 0.045,
+          size: pointSize * 0.64,
           sizeAttenuation: true,
           vertexColors: true,
           fog: true,
@@ -247,19 +254,6 @@ class MaterializationRuntime implements EffectInstance {
     this.setPreset("materialize");
   }
 
-  private setAudio(audio: AudioMetrics): void {
-    const computeUniforms = this.particlesVariable.material.uniforms;
-    const renderUniforms = this.material.uniforms;
-    computeUniforms.uAudioLevel.value = audio.level;
-    computeUniforms.uBass.value = audio.bass;
-    computeUniforms.uMid.value = audio.mid;
-    computeUniforms.uTreble.value = audio.treble;
-    renderUniforms.uAudioLevel.value = audio.level;
-    renderUniforms.uBass.value = audio.bass;
-    renderUniforms.uMid.value = audio.mid;
-    renderUniforms.uTreble.value = audio.treble;
-  }
-
   private setMaterializedSectionCount(count: number): void {
     const safeCount = THREE.MathUtils.clamp(Math.floor(count), 0, SECTION_COUNT);
     this.material.uniforms.uMaterializedSectionCount.value = safeCount;
@@ -280,15 +274,13 @@ class MaterializationRuntime implements EffectInstance {
     }
     const shaderTime = this.reducedMotion ? 0 : frame.elapsed;
     const delta = this.reducedMotion ? 0 : Math.min(Math.max(frame.delta, 0), 0.05);
-    const audio = syntheticAudio(shaderTime, frame.audio);
-    this.setAudio(audio);
     const computeUniforms = this.particlesVariable.material.uniforms;
     computeUniforms.uTime.value = shaderTime;
     computeUniforms.uDeltaTime.value = delta;
     if (delta > 0 && computeUniforms.uShaderEnabled.value > 0) this.gpgpu.compute();
     this.material.uniforms.uParticlesTexture.value = this.gpgpu.getCurrentRenderTarget(this.particlesVariable).texture;
-    this.group.rotation.y = shaderTime * 0.1 + audio.bass * 0.12;
-    this.group.rotation.x = Math.sin(shaderTime * 0.23) * 0.08 + audio.mid * 0.08;
+    this.group.rotation.y = shaderTime * 0.1;
+    this.group.rotation.x = Math.sin(shaderTime * 0.23) * 0.08;
   }
 
   resize(width: number, height: number, dpr: number): void {
@@ -310,9 +302,6 @@ class MaterializationRuntime implements EffectInstance {
     computeUniforms.uFlowEnabled.value = enabled;
     this.material.uniforms.uShaderEnabled.value = enabled;
     computeUniforms.uFlowFieldStrength.value = preset === "pulse" ? 3.15 : MATERIALIZATION_DEFAULTS.flowFieldStrength;
-    computeUniforms.uAudioFlowStrength.value = preset === "pulse" ? 0.38 : MATERIALIZATION_DEFAULTS.audioFlowStrength;
-    this.material.uniforms.uBassRadialStrength.value = preset === "pulse" ? 0.065 : MATERIALIZATION_DEFAULTS.bassRadialStrength;
-    this.material.uniforms.uTrebleSizeStrength.value = preset === "pulse" ? 0.18 : MATERIALIZATION_DEFAULTS.trebleSizeStrength;
     if (preset === "dissolve") this.setMaterializedSectionCount(SECTION_COUNT);
     else this.setMaterializedSectionCount(0);
   }

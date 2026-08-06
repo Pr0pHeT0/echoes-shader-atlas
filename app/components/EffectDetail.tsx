@@ -17,6 +17,8 @@ const defaultAudio: ShaderStageAudio = {
   treble: 0.42,
 };
 
+const silentAudio: ShaderStageAudio = { level: 0, bass: 0, mid: 0, treble: 0 };
+
 type ModelImportState = {
   phase: "idle" | "reading" | "ready" | "error";
   message: string;
@@ -135,7 +137,7 @@ export function EffectDetail({ effect }: { effect: ShaderEffectMeta }) {
       setModelFileName(file.name);
       setModelImport({
         phase: "ready",
-        message: `${file.name} is ready as a four-section particle target.`,
+        message: `${file.name} is ready with model colors and adaptive point sizing.`,
       });
       setPreset("materialize");
       setPaused(false);
@@ -188,8 +190,8 @@ export function EffectDetail({ effect }: { effect: ShaderEffectMeta }) {
           preset={preset}
           paused={paused}
           quality={quality}
-          syntheticAudio={automaticAudio}
-          audio={audio}
+          syntheticAudio={hasAudio && automaticAudio}
+          audio={hasAudio ? audio : silentAudio}
           pointCloud={pointCloud}
           label={`${effect.name} interactive shader study`}
         />
@@ -325,9 +327,9 @@ export function EffectDetail({ effect }: { effect: ShaderEffectMeta }) {
               <span className="section-kicker">Local geometry</span>
               <h2 id="model-import-title">Materialize your own model.</h2>
               <p className="hero-summary" id="model-import-help">
-                Choose one self-contained GLB 2.0 file. Echoes uses only its triangle geometry,
-                centers and scales it to fit, samples up to 64K points, and divides the result into
-                four reveal sections.
+                Choose one self-contained GLB 2.0 file. Echoes samples its triangle surfaces into
+                up to 64K points, preserves RGB vertex and base-material colors, and makes points
+                finer as model complexity increases.
               </p>
               <p className="model-import__privacy">
                 The file is processed in memory in this browser tab. It is never uploaded, stored,
@@ -345,13 +347,14 @@ export function EffectDetail({ effect }: { effect: ShaderEffectMeta }) {
                 </strong>
                 <small>
                   {pointCloud
-                    ? `${pointCloud.meshCount} ${pointCloud.meshCount === 1 ? "mesh" : "meshes"} · ${Math.round(pointCloud.count / 1024)}K sampled particles · local only`
+                    ? `${pointCloud.meshCount} ${pointCloud.meshCount === 1 ? "mesh" : "meshes"} · ${pointCloud.triangleCount.toLocaleString()} valid triangles · adaptive size · local only`
                     : "Built-in deterministic geometry"}
                 </small>
               </div>
               <p className="model-import__requirements" id="model-import-requirements">
-                GLB 2.0 · 20 MB maximum · static triangle meshes. Materials, textures, animation,
-                cameras, and lights are ignored. Draco, Meshopt, and instancing are not supported.
+                GLB 2.0 · 20 MB maximum · static triangle meshes. RGB vertex colors multiply each
+                mesh&apos;s base-material color. Texture maps, animation, cameras, and lights are ignored.
+                Draco, Meshopt, and instancing are not supported.
               </p>
               <div className="model-import__actions">
                 <label className="model-import__chooser">

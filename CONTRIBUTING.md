@@ -67,7 +67,8 @@ when it is replaced.
 Keep these project guarantees intact:
 
 - no microphone permission, server-side uploads, persistence, accounts, arbitrary shader execution,
-  or external API dependency; the bounded GLB importer processes model geometry only in browser memory;
+  or external API dependency; the bounded GLB importer processes model geometry and RGB color only in
+  browser memory;
 - capped device pixel ratio and bounded particle counts;
 - pause work while the document is hidden;
 - reduced-motion and WebGL-unavailable fallbacks; and

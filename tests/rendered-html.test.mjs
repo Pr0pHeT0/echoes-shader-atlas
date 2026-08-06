@@ -10,7 +10,7 @@ const effectNames = new Map([
   ["voice-wave-particles", "Voice Wave Particles"],
   ["morphing-echoes-title", "Morphing Echoes Title"],
   ["orb-to-scene-reveal", "Orb-to-Scene Reveal"],
-  ["audio-reactive-materialization", "Audio-Reactive Materialization"],
+  ["audio-reactive-materialization", "Point-Cloud Materialization"],
 ]);
 
 let workerPromise;
@@ -87,6 +87,9 @@ test("server-renders every effect permalink with its own classified content", as
         assert.match(html, /Materialize your own model/i);
         assert.match(html, /type=["']file["'][^>]+accept=["']\.glb,model\/gltf-binary["']/i);
         assert.match(html, /never uploaded, stored/i);
+        assert.match(html, /vertex colors/i);
+        assert.match(html, /adaptive point sizing/i);
+        assert.doesNotMatch(html, /Audio response, without a microphone/i);
       } else {
         assert.doesNotMatch(html, /type=["']file["']/i);
         assert.doesNotMatch(html, /Choose local GLB/i);

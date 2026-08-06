@@ -4,6 +4,7 @@ import type {
   EffectId,
   EffectInstance,
   EffectPointer,
+  MaterializationPointCloud,
 } from "./types";
 
 export type StageQuality = "low" | "auto" | "high";
@@ -52,6 +53,7 @@ export interface StageRuntimeContext {
   dpr: number;
   particleCount: number;
   reducedMotion: boolean;
+  pointCloud?: MaterializationPointCloud | null;
 }
 
 export interface StageStatus {
@@ -72,6 +74,7 @@ export interface StageControllerOptions {
   paused?: boolean;
   syntheticAudio?: boolean;
   audio?: AudioMetrics;
+  pointCloud?: MaterializationPointCloud | null;
 }
 
 const ZERO_AUDIO: AudioMetrics = { level: 0, bass: 0, mid: 0, treble: 0 };
@@ -118,6 +121,7 @@ export class ShaderStageController {
   private paused: boolean;
   private useSyntheticAudio: boolean;
   private audio: AudioMetrics;
+  private pointCloud: MaterializationPointCloud | null;
   private pointer: EffectPointer | null = null;
 
   constructor(options: StageControllerOptions) {
@@ -127,6 +131,7 @@ export class ShaderStageController {
     this.paused = options.paused ?? false;
     this.useSyntheticAudio = options.syntheticAudio ?? false;
     this.audio = options.audio ?? ZERO_AUDIO;
+    this.pointCloud = options.pointCloud ?? null;
     this.reducedMotion = options.environment.matchMedia("(prefers-reduced-motion: reduce)").matches;
     this.dpr = Math.min(Math.max(options.environment.devicePixelRatio || 1, 0.5), 1.5);
     this.particleCount = selectStageParticleCount(options.quality, options.environment);
@@ -189,6 +194,7 @@ export class ShaderStageController {
         dpr: this.dpr,
         particleCount: this.particleCount,
         reducedMotion: this.reducedMotion,
+        pointCloud: this.pointCloud,
       });
       if (this.disposed || generation !== this.generation) {
         instance.dispose();

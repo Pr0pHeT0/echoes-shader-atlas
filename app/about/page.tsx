@@ -163,6 +163,11 @@ export default function AboutPage() {
               Materialization uses a segmented torus knot.
             </p>
             <p>
+              The materialization study also accepts an optional self-contained GLB as a temporary local
+              point target. Model data is processed only in browser memory, is never uploaded or stored,
+              and disappears when the page is refreshed or closed.
+            </p>
+            <p>
               Synthetic audio drives all reactive demonstrations, so the site never asks for microphone
               access or ships recordings. The particle title changes only its copy, from the original
               product wordmark to the neutral word ECHOES.

@@ -1357,6 +1357,168 @@ button {
   accent-color: var(--cyan);
 }
 
+.model-import {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(22rem, 1.2fr);
+  gap: 8vw;
+  align-items: start;
+}
+
+.model-import__copy .hero-summary {
+  max-width: 42rem;
+  margin-top: 1.4rem;
+}
+
+.model-import__privacy {
+  max-width: 42rem;
+  margin: 1.5rem 0 0;
+  padding-left: 1rem;
+  border-left: 1px solid var(--cyan);
+  color: #c8dcdd;
+  font-family: var(--mono);
+  font-size: 0.64rem;
+  letter-spacing: 0.035em;
+  line-height: 1.7;
+}
+
+.model-import__panel {
+  padding: clamp(1.25rem, 2.6vw, 2rem);
+  border: 1px solid var(--line-strong);
+  background:
+    linear-gradient(135deg, rgba(30, 219, 255, 0.055), transparent 42%),
+    var(--ink-soft);
+}
+
+.model-import__target {
+  display: grid;
+  gap: 0.45rem;
+  padding-bottom: 1.25rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.model-import__target > span,
+.model-import__requirements {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.56rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.model-import__target strong {
+  overflow: hidden;
+  color: var(--pearl);
+  font-family: var(--display);
+  font-size: clamp(1.4rem, 2.8vw, 2.35rem);
+  font-weight: 440;
+  letter-spacing: -0.035em;
+  line-height: 1.05;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-import__target small {
+  color: var(--cyan);
+  font-family: var(--mono);
+  font-size: 0.56rem;
+  letter-spacing: 0.065em;
+  line-height: 1.5;
+  text-transform: uppercase;
+}
+
+.model-import__requirements {
+  margin: 1.25rem 0;
+  line-height: 1.7;
+  text-transform: none;
+}
+
+.model-import__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  align-items: stretch;
+}
+
+.model-import__chooser {
+  position: relative;
+  display: inline-flex;
+  min-height: 3.25rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0 1.1rem;
+  border: 1px solid var(--cyan);
+  color: var(--cyan);
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 0.64rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.model-import__chooser:hover,
+.model-import__chooser:focus-within {
+  background: var(--cyan);
+  color: #001014;
+  outline: 2px solid rgba(84, 230, 255, 0.35);
+  outline-offset: 2px;
+}
+
+.model-import__chooser:has(input:disabled) {
+  cursor: wait;
+  opacity: 0.58;
+}
+
+.model-import__chooser input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.model-import__actions .ghost-button:disabled {
+  cursor: wait;
+  opacity: 0.58;
+}
+
+.model-import__stage-link {
+  display: inline-flex;
+  min-height: 3.25rem;
+  align-items: center;
+  padding: 0 0.6rem;
+  color: #c8d7d8;
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.model-import__stage-link:hover {
+  color: var(--cyan);
+}
+
+.model-import__status {
+  min-height: 1.45rem;
+  margin: 1rem 0 0;
+  color: #91a2a4;
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  letter-spacing: 0.04em;
+  line-height: 1.6;
+}
+
+.model-import__status--reading,
+.model-import__status--ready {
+  color: var(--cyan);
+}
+
+.model-import__status--error {
+  color: #ff9cae;
+}
+
 /* About */
 .page-main {
   min-height: 72svh;
@@ -1473,6 +1635,7 @@ button {
   .catalog-heading,
   .editorial-section,
   .detail-intro,
+  .model-import,
   .related-studies__heading,
   .about-hero {
     grid-template-columns: 1fr;
@@ -1590,6 +1753,23 @@ button {
   .source-browser__heading {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .model-import__actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .model-import__chooser,
+  .model-import__actions .ghost-button,
+  .model-import__stage-link {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .model-import__target strong {
+    overflow-wrap: anywhere;
+    white-space: normal;
   }
 
   .technical-notes {

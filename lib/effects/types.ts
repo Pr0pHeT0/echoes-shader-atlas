@@ -24,6 +24,15 @@ export interface EffectPointer {
   y: number;
 }
 
+export interface MaterializationPointCloud {
+  positions: Float32Array;
+  colors: Float32Array;
+  sections: Float32Array;
+  count: number;
+  meshCount: number;
+  triangleCount: number;
+}
+
 export interface EffectFrame {
   elapsed: number;
   delta: number;
@@ -43,6 +52,8 @@ export interface EffectRuntimeContext {
   /** Requested budget. Runtimes clamp this to 16K/64K policy limits. */
   particleCount: number;
   reducedMotion: boolean;
+  /** Optional browser-local geometry target for the materialization runtime. */
+  pointCloud?: MaterializationPointCloud | null;
 }
 
 export interface EffectInstance {

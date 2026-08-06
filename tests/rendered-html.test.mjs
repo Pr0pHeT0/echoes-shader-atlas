@@ -83,6 +83,14 @@ test("server-renders every effect permalink with its own classified content", as
       assert.match(html, /Echoes Shaders/i);
       assert.match(html, /<meta[^>]+property=["']og:image["'][^>]+og\.png/i);
       assert.match(html, /<meta[^>]+name=["']twitter:image["'][^>]+og\.png/i);
+      if (effectId === "audio-reactive-materialization") {
+        assert.match(html, /Materialize your own model/i);
+        assert.match(html, /type=["']file["'][^>]+accept=["']\.glb,model\/gltf-binary["']/i);
+        assert.match(html, /never uploaded, stored/i);
+      } else {
+        assert.doesNotMatch(html, /type=["']file["']/i);
+        assert.doesNotMatch(html, /Choose local GLB/i);
+      }
     });
   }
 });

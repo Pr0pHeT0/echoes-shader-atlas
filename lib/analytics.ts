@@ -3,6 +3,7 @@ export type AnalyticsConsent = "granted" | "denied" | null;
 export type AnalyticsEventName =
   | "catalog_filter"
   | "effect_select"
+  | "local_model_import"
   | "playback_change"
   | "preset_change"
   | "quality_change"

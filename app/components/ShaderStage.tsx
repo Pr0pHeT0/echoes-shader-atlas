@@ -5,7 +5,7 @@ import type { WebGLRenderer } from "three";
 import { createEffectRuntime } from "@/lib/effects/runtime-registry";
 import { ShaderStageController } from "@/lib/effects/stage-controller";
 import type { StageEnvironment, StageQuality } from "@/lib/effects/stage-controller";
-import type { AudioMetrics, EffectId } from "@/lib/effects/types";
+import type { AudioMetrics, EffectId, MaterializationPointCloud } from "@/lib/effects/types";
 
 export type ShaderStageAudio = AudioMetrics;
 export type ShaderStageQuality = StageQuality;
@@ -17,6 +17,7 @@ type ShaderStageProps = {
   quality?: ShaderStageQuality;
   syntheticAudio?: boolean;
   audio?: ShaderStageAudio;
+  pointCloud?: MaterializationPointCloud | null;
   label: string;
 };
 
@@ -48,19 +49,20 @@ export function ShaderStage({
   quality = "auto",
   syntheticAudio = false,
   audio = ZERO_AUDIO,
+  pointCloud = null,
   label,
 }: ShaderStageProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const controllerRef = useRef<ShaderStageController | null>(null);
   const mountedEffectRef = useRef(effectId);
-  const latestPropsRef = useRef({ effectId, preset, paused, syntheticAudio, audio });
+  const latestPropsRef = useRef({ effectId, preset, paused, syntheticAudio, audio, pointCloud });
   const [failure, setFailure] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    latestPropsRef.current = { effectId, preset, paused, syntheticAudio, audio };
-  }, [audio, effectId, paused, preset, syntheticAudio]);
+    latestPropsRef.current = { effectId, preset, paused, syntheticAudio, audio, pointCloud };
+  }, [audio, effectId, paused, pointCloud, preset, syntheticAudio]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -87,6 +89,7 @@ export function ShaderStage({
           paused: initial.paused,
           syntheticAudio: initial.syntheticAudio,
           audio: initial.audio,
+          pointCloud: initial.pointCloud,
           createRenderer: (stageCanvas, context, stageQuality) => {
             const renderer = new THREE.WebGLRenderer({
               canvas: stageCanvas as HTMLCanvasElement,

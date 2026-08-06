@@ -6,7 +6,7 @@ import { SiteHeader } from "../components/SiteHeader";
 import { createPageMetadata, SITE_URL } from "@/lib/site";
 
 const description =
-  "Learn how Echoes Shaders uses consent-gated Google Analytics, local browser preferences, limited event data, synthetic audio, and privacy controls.";
+  "Learn how Echoes Shaders handles consent-gated analytics, local GLB processing, browser preferences, synthetic audio, and visitor privacy controls.";
 
 export const metadata = createPageMetadata({
   path: "/privacy",
@@ -40,8 +40,8 @@ export default function PrivacyPage() {
           </div>
           <div>
             <p className="lead">
-              The shader site works without accounts, uploads, microphone access, or analytics.
-              Optional measurement runs only after you choose to allow it.
+              The shader site works without accounts, server uploads, persistence, microphone access,
+              or analytics. Optional measurement runs only after you choose to allow it.
             </p>
             <a className="text-link" href="/">
               Return to the shaders <span aria-hidden="true">↗</span>
@@ -60,7 +60,8 @@ export default function PrivacyPage() {
             <p>
               When allowed, measurement covers route views and a small set of product interactions:
               choosing an effect, filtering the catalog, changing preview controls, selecting a
-              source tab, and copying shader source.
+              source tab, copying shader source, and a fixed success-or-error result when the optional
+              local model importer is used.
             </p>
           </section>
 
@@ -69,8 +70,13 @@ export default function PrivacyPage() {
             <h2 id="data-heading">No identity fields. No microphone data.</h2>
             <p>
               The site does not send names, email addresses, account identifiers, typed content,
-              microphone input, or shader source to analytics. Event details are limited to fixed
-              catalog labels and control choices.
+              microphone input, shader source, model filenames, file sizes, or model geometry to
+              analytics. Event details are limited to fixed catalog labels and control choices.
+            </p>
+            <p>
+              On the materialization study, a self-contained GLB can be read directly in browser
+              memory and converted into a bounded point target. The selected file and derived geometry
+              are never sent to a server, saved, or retained after refresh or navigation.
             </p>
             <p>
               Google Analytics may receive ordinary technical request information and may set

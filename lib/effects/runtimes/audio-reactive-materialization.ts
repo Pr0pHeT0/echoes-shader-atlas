@@ -8,7 +8,12 @@ import { composeShader } from "../../shaders/compose";
 import { createSegmentedTorusKnot, seededValue } from "../geometry";
 import { EFFECT_PRESETS, MATERIALIZATION_DEFAULTS } from "../runtime-config";
 import { clampDpr, makeShowcaseScene, resolveParticleCount, syntheticAudio } from "../runtime-utils";
-import type { AudioMetrics, EffectFrame, EffectInstance, EffectRuntimeContext } from "../types";
+import type {
+  AudioMetrics,
+  EffectFrame,
+  EffectInstance,
+  EffectRuntimeContext,
+} from "../types";
 
 const PRESETS = EFFECT_PRESETS["audio-reactive-materialization"];
 const SECTION_COUNT = 4;
@@ -24,8 +29,8 @@ class MaterializationRuntime implements EffectInstance {
   private readonly geometry = new THREE.BufferGeometry();
   private readonly material: THREE.ShaderMaterial;
   private readonly points: THREE.Points;
-  private readonly sectionMeshes: THREE.Mesh[] = [];
-  private readonly sectionMaterials: THREE.MeshStandardMaterial[] = [];
+  private readonly sectionMeshes: Array<THREE.Mesh | THREE.Points> = [];
+  private readonly sectionMaterials: THREE.Material[] = [];
   private readonly gpgpu: GPUComputationRenderer;
   private readonly particlesVariable: ReturnType<GPUComputationRenderer["addVariable"]>;
   private readonly baseTexture: THREE.DataTexture;
@@ -49,7 +54,31 @@ class MaterializationRuntime implements EffectInstance {
     this.scene.add(keyLight);
 
     const count = resolveParticleCount(context);
-    const knot = createSegmentedTorusKnot(count);
+    const uploaded = context.pointCloud
+      && context.pointCloud.count > 0
+      && context.pointCloud.positions.length >= context.pointCloud.count * 3
+      && context.pointCloud.colors.length >= context.pointCloud.count * 3
+      && context.pointCloud.sections.length >= context.pointCloud.count
+      ? context.pointCloud
+      : null;
+    const knot = uploaded ? null : createSegmentedTorusKnot(count);
+    const targetPositions = uploaded ? new Float32Array(count * 3) : knot!.positions;
+    const targetColors = uploaded ? new Float32Array(count * 3) : knot!.colors;
+    const targetSections = uploaded ? new Float32Array(count) : knot!.particleSections;
+    if (uploaded) {
+      for (let index = 0; index < count; index += 1) {
+        const sourceIndex = index % uploaded.count;
+        const sourceOffset = sourceIndex * 3;
+        const targetOffset = index * 3;
+        targetPositions[targetOffset] = uploaded.positions[sourceOffset];
+        targetPositions[targetOffset + 1] = uploaded.positions[sourceOffset + 1];
+        targetPositions[targetOffset + 2] = uploaded.positions[sourceOffset + 2];
+        targetColors[targetOffset] = uploaded.colors[sourceOffset];
+        targetColors[targetOffset + 1] = uploaded.colors[sourceOffset + 1];
+        targetColors[targetOffset + 2] = uploaded.colors[sourceOffset + 2];
+        targetSections[index] = THREE.MathUtils.clamp(Math.floor(uploaded.sections[sourceIndex]), 0, 3);
+      }
+    }
     const textureSize = Math.ceil(Math.sqrt(count));
     this.gpgpu = new GPUComputationRenderer(textureSize, textureSize, this.renderer);
     this.baseTexture = this.gpgpu.createTexture();
@@ -61,8 +90,17 @@ class MaterializationRuntime implements EffectInstance {
       if (index >= count) continue;
       const positionOffset = index * 3;
       for (let channel = 0; channel < 3; channel += 1) {
-        baseData[textureOffset + channel] = knot.positions[positionOffset + channel];
-        particleData[textureOffset + channel] = knot.positions[positionOffset + channel];
+        baseData[textureOffset + channel] = targetPositions[positionOffset + channel];
+        particleData[textureOffset + channel] = targetPositions[positionOffset + channel];
+      }
+      if (uploaded) {
+        const azimuth = seededValue(index, 71) * Math.PI * 2;
+        const vertical = seededValue(index, 73) * 2 - 1;
+        const horizontal = Math.sqrt(Math.max(0, 1 - vertical * vertical));
+        const radius = 0.65 + seededValue(index, 79) * 1.35;
+        particleData[textureOffset] += Math.cos(azimuth) * horizontal * radius;
+        particleData[textureOffset + 1] += vertical * radius;
+        particleData[textureOffset + 2] += Math.sin(azimuth) * horizontal * radius;
       }
       const lifetime = seededValue(index, 41);
       baseData[textureOffset + 3] = lifetime;
@@ -116,9 +154,9 @@ class MaterializationRuntime implements EffectInstance {
     }
     this.geometry.setDrawRange(0, count);
     this.geometry.setAttribute("aParticlesUv", new THREE.BufferAttribute(particleUvs, 2));
-    this.geometry.setAttribute("aColor", new THREE.BufferAttribute(knot.colors, 3));
+    this.geometry.setAttribute("aColor", new THREE.BufferAttribute(targetColors, 3));
     this.geometry.setAttribute("aSize", new THREE.BufferAttribute(sizes, 1));
-    this.geometry.setAttribute("aSection", new THREE.BufferAttribute(knot.particleSections, 1));
+    this.geometry.setAttribute("aSection", new THREE.BufferAttribute(targetSections, 1));
     const dpr = clampDpr(context.dpr);
     this.material = new THREE.ShaderMaterial({
       vertexShader,
@@ -148,23 +186,62 @@ class MaterializationRuntime implements EffectInstance {
     this.points = new THREE.Points(this.geometry, this.material);
     this.points.frustumCulled = false;
     this.group.add(this.points);
-    const sectionColors = [0x1edbff, 0x45c7ef, 0x6d8cf1, 0x805cff];
-    knot.sections.forEach((section, index) => {
-      const geometry = new THREE.BufferGeometry();
-      geometry.setAttribute("position", new THREE.BufferAttribute(section.positions, 3));
-      geometry.setAttribute("normal", new THREE.BufferAttribute(section.normals, 3));
-      const material = new THREE.MeshStandardMaterial({
-        color: sectionColors[index],
-        roughness: 0.34,
-        metalness: 0.5,
-        side: THREE.DoubleSide,
+    if (uploaded) {
+      const sectionPositions: number[][] = [[], [], [], []];
+      const sectionColors: number[][] = [[], [], [], []];
+      for (let index = 0; index < count; index += 1) {
+        const section = targetSections[index];
+        const offset = index * 3;
+        sectionPositions[section].push(
+          targetPositions[offset],
+          targetPositions[offset + 1],
+          targetPositions[offset + 2],
+        );
+        sectionColors[section].push(
+          targetColors[offset],
+          targetColors[offset + 1],
+          targetColors[offset + 2],
+        );
+      }
+      sectionPositions.forEach((positions, index) => {
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+        geometry.setAttribute("color", new THREE.Float32BufferAttribute(sectionColors[index], 3));
+        const material = new THREE.PointsMaterial({
+          size: 0.045,
+          sizeAttenuation: true,
+          vertexColors: true,
+          fog: true,
+          transparent: true,
+          opacity: 0.96,
+          depthWrite: true,
+        });
+        const points = new THREE.Points(geometry, material);
+        points.visible = false;
+        points.frustumCulled = false;
+        this.sectionMeshes.push(points);
+        this.sectionMaterials.push(material);
+        this.group.add(points);
       });
-      const mesh = new THREE.Mesh(geometry, material);
-      mesh.visible = false;
-      this.sectionMeshes.push(mesh);
-      this.sectionMaterials.push(material);
-      this.group.add(mesh);
-    });
+    } else {
+      const sectionColors = [0x1edbff, 0x45c7ef, 0x6d8cf1, 0x805cff];
+      knot!.sections.forEach((section, index) => {
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute("position", new THREE.BufferAttribute(section.positions, 3));
+        geometry.setAttribute("normal", new THREE.BufferAttribute(section.normals, 3));
+        const material = new THREE.MeshStandardMaterial({
+          color: sectionColors[index],
+          roughness: 0.34,
+          metalness: 0.5,
+          side: THREE.DoubleSide,
+        });
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.visible = false;
+        this.sectionMeshes.push(mesh);
+        this.sectionMaterials.push(material);
+        this.group.add(mesh);
+      });
+    }
     this.scene.add(this.group);
     this.resize(context.width, context.height, context.dpr);
     this.setPreset("materialize");

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { Breadcrumbs } from "./Breadcrumbs";
 import type { ShaderEffectMeta } from "@/lib/catalog/types";
 import { effectShaderSources } from "@/lib/effects/source-registry";
@@ -8,6 +8,7 @@ import { trackEvent } from "@/lib/analytics";
 import { SITE_GITHUB_URL, SITE_MANIFEST_URL, SITE_THREE_VERSION } from "@/lib/site";
 import { ShaderStage, type ShaderStageAudio, type ShaderStageQuality } from "./ShaderStage";
 import { SourceBrowser } from "./SourceBrowser";
+import type { MaterializationPointCloud } from "@/lib/effects/types";
 
 const defaultAudio: ShaderStageAudio = {
   level: 0.5,
@@ -16,6 +17,29 @@ const defaultAudio: ShaderStageAudio = {
   treble: 0.42,
 };
 
+type ModelImportState = {
+  phase: "idle" | "reading" | "ready" | "error";
+  message: string;
+};
+
+const defaultModelImportState: ModelImportState = {
+  phase: "idle",
+  message: "Procedural torus knot is active.",
+};
+
+const modelImportResultCodes = new Set([
+  "format",
+  "empty",
+  "size",
+  "external",
+  "compression",
+  "complexity",
+  "geometry",
+  "degenerate",
+  "parse",
+  "memory",
+]);
+
 export function EffectDetail({ effect }: { effect: ShaderEffectMeta }) {
   const [preset, setPreset] = useState(effect.presets[0]?.id ?? "default");
   const [paused, setPaused] = useState(false);
@@ -23,7 +47,13 @@ export function EffectDetail({ effect }: { effect: ShaderEffectMeta }) {
   const [restartKey, setRestartKey] = useState(0);
   const [automaticAudio, setAutomaticAudio] = useState(true);
   const [audio, setAudio] = useState<ShaderStageAudio>(defaultAudio);
+  const [pointCloud, setPointCloud] = useState<MaterializationPointCloud | null>(null);
+  const [modelFileName, setModelFileName] = useState<string | null>(null);
+  const [modelImport, setModelImport] = useState<ModelImportState>(defaultModelImportState);
+  const modelImportGeneration = useRef(0);
+  const modelInputRef = useRef<HTMLInputElement>(null);
   const hasAudio = effect.drivers.some((driver) => driver.startsWith("Synthetic"));
+  const acceptsLocalModel = effect.id === "audio-reactive-materialization";
   const usesAshimaNoise = effect.sourceUnits.some((source) => source.id === "simplex-noise-4d");
   const sources = useMemo(
     () => effectShaderSources[effect.id].map((source) => ({
@@ -34,6 +64,10 @@ export function EffectDetail({ effect }: { effect: ShaderEffectMeta }) {
     })),
     [effect.id],
   );
+
+  useEffect(() => () => {
+    modelImportGeneration.current += 1;
+  }, []);
 
   function setAudioBand(band: keyof ShaderStageAudio, value: number) {
     if (automaticAudio) {
@@ -86,6 +120,64 @@ export function EffectDetail({ effect }: { effect: ShaderEffectMeta }) {
     });
   }
 
+  async function importLocalModel(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const generation = modelImportGeneration.current + 1;
+    modelImportGeneration.current = generation;
+    setModelImport({ phase: "reading", message: `Reading ${file.name} locally…` });
+
+    try {
+      const modelModule = await import("@/lib/effects/materialization-model");
+      const prepared = await modelModule.createMaterializationPointCloudFromFile(file);
+      if (modelImportGeneration.current !== generation) return;
+      setPointCloud(prepared);
+      setModelFileName(file.name);
+      setModelImport({
+        phase: "ready",
+        message: `${file.name} is ready as a four-section particle target.`,
+      });
+      setPreset("materialize");
+      setPaused(false);
+      setRestartKey((value) => value + 1);
+      trackEvent("local_model_import", {
+        effect_id: effect.id,
+        result: "success",
+      });
+    } catch (error) {
+      if (modelImportGeneration.current !== generation) return;
+      const message = error instanceof Error
+        ? error.message
+        : "This model could not be prepared. The current target has not changed.";
+      const candidateResult = error && typeof error === "object" && "code" in error
+        ? String(error.code)
+        : "unknown";
+      const result = modelImportResultCodes.has(candidateResult) ? candidateResult : "unknown";
+      setModelImport({ phase: "error", message });
+      trackEvent("local_model_import", {
+        effect_id: effect.id,
+        result,
+      });
+    } finally {
+      if (modelInputRef.current) modelInputRef.current.value = "";
+    }
+  }
+
+  function restoreProceduralModel() {
+    modelImportGeneration.current += 1;
+    setPointCloud(null);
+    setModelFileName(null);
+    setModelImport({ phase: "idle", message: "Procedural torus knot restored." });
+    setPreset("materialize");
+    setPaused(false);
+    setRestartKey((value) => value + 1);
+    if (modelInputRef.current) modelInputRef.current.value = "";
+    trackEvent("local_model_import", {
+      effect_id: effect.id,
+      result: "restore_default",
+    });
+  }
+
   return (
     <>
       <section className="detail-hero" aria-labelledby="effect-title">
@@ -98,6 +190,7 @@ export function EffectDetail({ effect }: { effect: ShaderEffectMeta }) {
           quality={quality}
           syntheticAudio={automaticAudio}
           audio={audio}
+          pointCloud={pointCloud}
           label={`${effect.name} interactive shader study`}
         />
         <div className="hero-grid" aria-hidden="true" />
@@ -225,6 +318,81 @@ export function EffectDetail({ effect }: { effect: ShaderEffectMeta }) {
             </div>
           </div>
         </section>
+
+        {acceptsLocalModel ? (
+          <section className="detail-section model-import" aria-labelledby="model-import-title">
+            <div className="model-import__copy">
+              <span className="section-kicker">Local geometry</span>
+              <h2 id="model-import-title">Materialize your own model.</h2>
+              <p className="hero-summary" id="model-import-help">
+                Choose one self-contained GLB 2.0 file. Echoes uses only its triangle geometry,
+                centers and scales it to fit, samples up to 64K points, and divides the result into
+                four reveal sections.
+              </p>
+              <p className="model-import__privacy">
+                The file is processed in memory in this browser tab. It is never uploaded, stored,
+                or included in analytics.
+              </p>
+            </div>
+            <div
+              className="model-import__panel"
+              aria-busy={modelImport.phase === "reading"}
+            >
+              <div className="model-import__target">
+                <span>Current target</span>
+                <strong title={modelFileName ?? undefined}>
+                  {modelFileName ?? "Procedural torus knot"}
+                </strong>
+                <small>
+                  {pointCloud
+                    ? `${pointCloud.meshCount} ${pointCloud.meshCount === 1 ? "mesh" : "meshes"} · ${Math.round(pointCloud.count / 1024)}K sampled particles · local only`
+                    : "Built-in deterministic geometry"}
+                </small>
+              </div>
+              <p className="model-import__requirements" id="model-import-requirements">
+                GLB 2.0 · 20 MB maximum · static triangle meshes. Materials, textures, animation,
+                cameras, and lights are ignored. Draco, Meshopt, and instancing are not supported.
+              </p>
+              <div className="model-import__actions">
+                <label className="model-import__chooser">
+                  <input
+                    ref={modelInputRef}
+                    type="file"
+                    accept=".glb,model/gltf-binary"
+                    aria-describedby="model-import-help model-import-requirements model-import-status"
+                    disabled={modelImport.phase === "reading"}
+                    onChange={importLocalModel}
+                  />
+                  <span>{pointCloud ? "Replace local GLB" : "Choose local GLB"}</span>
+                </label>
+                {pointCloud ? (
+                  <button
+                    className="ghost-button"
+                    type="button"
+                    disabled={modelImport.phase === "reading"}
+                    onClick={restoreProceduralModel}
+                  >
+                    Restore torus knot
+                  </button>
+                ) : null}
+                {pointCloud ? (
+                  <a className="model-import__stage-link" href="#effect-title">
+                    View in live stage ↑
+                  </a>
+                ) : null}
+              </div>
+              <p
+                className={`model-import__status model-import__status--${modelImport.phase}`}
+                id="model-import-status"
+                role={modelImport.phase === "error" ? "alert" : "status"}
+                aria-live={modelImport.phase === "error" ? "assertive" : "polite"}
+                aria-atomic="true"
+              >
+                {modelImport.message}
+              </p>
+            </div>
+          </section>
+        ) : null}
 
         {hasAudio ? (
           <section className="detail-section" aria-labelledby="audio-title">

@@ -5,8 +5,10 @@ interactive demonstrations with classification, presets, source tabs, provenance
 implementation notes.
 
 The site is built with React, TypeScript, vinext, and Three.js `0.185.0`. It is static by design:
-there are no accounts, uploads, microphone permissions, or persistence. Optional Google Analytics 4
-measurement is consent-gated and the Google tag is not loaded unless a visitor explicitly accepts.
+there are no accounts, server uploads, microphone permissions, or persistence. The materialization
+study can process a self-contained GLB locally in the browser; its bytes and derived point cloud never
+leave the tab. Optional Google Analytics 4 measurement is consent-gated and the Google tag is not
+loaded unless a visitor explicitly accepts.
 
 ## Catalog
 
@@ -67,7 +69,8 @@ record; retain that record to keep verification active.
 
 - `/` — immersive reel, classification filters, and the complete effect catalog.
 - `/effects/[slug]` — one live study with presets, playback and quality controls, synthetic-audio
-  controls where relevant, source tabs, and implementation notes.
+  controls where relevant, an optional browser-local GLB target for materialization, source tabs, and
+  implementation notes.
 - `/about` — extraction method, taxonomy, provenance, asset policy, licenses, and contribution guide.
 - `/privacy` — optional analytics disclosure and persistent consent controls.
 
@@ -112,6 +115,10 @@ Their role is replaced, not imitated:
 
 - Orb-to-Scene Reveal targets deterministic seeded terrain.
 - Audio-Reactive Materialization targets a segmented torus knot.
+
+Visitors may temporarily replace that torus knot with their own self-contained GLB. The importer reads
+only bounded triangle geometry, samples it into the existing particle budget, does not transmit or store
+the file, and restores the procedural target on refresh or navigation.
 
 All audio-reactive effects use generated control signals. The site never requests microphone access and
 does not include the source project's recordings, screenshots, models, or product branding.

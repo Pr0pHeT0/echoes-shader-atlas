@@ -144,7 +144,7 @@ function makeRuntime(id) {
   };
 }
 
-function makeHarness({ context = {}, reducedMotion = false } = {}) {
+function makeHarness({ context = {}, reducedMotion = false, pointCloud = null } = {}) {
   const environment = new FakeEnvironment();
   environment.reducedMotion = reducedMotion;
   const canvas = new FakeCanvas(context);
@@ -160,6 +160,7 @@ function makeHarness({ context = {}, reducedMotion = false } = {}) {
     canvas,
     environment,
     preset: "quiet-drift",
+    pointCloud,
     createRenderer: () => renderer,
     createEffect: async (id, runtimeContext) => {
       contexts.push(runtimeContext);
@@ -171,6 +172,26 @@ function makeHarness({ context = {}, reducedMotion = false } = {}) {
   });
   return { controller, environment, canvas, host, renderer, runtimes, contexts, statuses };
 }
+
+test("browser-local point targets reach the runtime and survive context restoration", async () => {
+  const pointCloud = {
+    positions: new Float32Array([0, 0, 0]),
+    colors: new Float32Array([0, 1, 1]),
+    sections: new Float32Array([0]),
+    count: 1,
+    meshCount: 1,
+    triangleCount: 1,
+  };
+  const harness = makeHarness({ pointCloud });
+  await harness.controller.mount();
+  assert.equal(harness.contexts[0].pointCloud, pointCloud);
+
+  harness.canvas.dispatch("webglcontextlost");
+  harness.canvas.dispatch("webglcontextrestored");
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(harness.contexts[1].pointCloud, pointCloud);
+  harness.controller.dispose();
+});
 
 test("controller mounts, switches effects, and releases every owned resource on unmount", async () => {
   const harness = makeHarness();

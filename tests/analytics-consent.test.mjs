@@ -58,9 +58,32 @@ test("analytics helpers are inert and SSR-safe without browser globals", async (
     assert.equal(analytics.getAnalyticsConsent(), null);
     assert.doesNotThrow(() => analytics.setAnalyticsConsent("granted"));
     assert.doesNotThrow(() => analytics.disableAnalytics());
+    assert.doesNotThrow(() => analytics.ensureGoogleTagQueue());
     assert.doesNotThrow(() => analytics.trackEvent("effect_select", { effect: "aurora-field" }));
   } finally {
     if (hadWindow) globalThis.window = priorWindow;
+  }
+});
+
+test("the Google tag queue uses the canonical arguments object", async () => {
+  const analytics = await configuredAnalytics();
+  const browser = {};
+  const restore = installBrowserGlobals(browser);
+
+  try {
+    analytics.ensureGoogleTagQueue();
+    browser.gtag("config", "G-ECHOES-TEST", { send_page_view: true });
+
+    assert.equal(browser.dataLayer.length, 1);
+    assert.equal(Array.isArray(browser.dataLayer[0]), false, "rest-parameter arrays are not valid gtag commands");
+    assert.equal(Object.prototype.toString.call(browser.dataLayer[0]), "[object Arguments]");
+    assert.deepEqual(Array.from(browser.dataLayer[0]), [
+      "config",
+      "G-ECHOES-TEST",
+      { send_page_view: true },
+    ]);
+  } finally {
+    restore();
   }
 });
 

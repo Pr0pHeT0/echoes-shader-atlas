@@ -6,6 +6,7 @@ import {
   ANALYTICS_CONSENT_KEY,
   configureAnalytics,
   disableAnalytics,
+  ensureGoogleTagQueue,
   getAnalyticsConsent,
   setAnalyticsConsent,
   type AnalyticsConsent,
@@ -35,13 +36,11 @@ function enableGoogleAnalytics(measurementId: string): void {
   if (!measurementId || typeof window === "undefined") return;
 
   (window as unknown as Record<string, unknown>)[`ga-disable-${measurementId}`] = false;
-  window.dataLayer ??= [];
-  window.gtag ??= (...args: unknown[]) => {
-    window.dataLayer?.push(args);
-  };
+  const gtag = ensureGoogleTagQueue();
+  if (!gtag) return;
 
   if (!window.__echoesAnalyticsInitialized) {
-    window.gtag("consent", "default", {
+    gtag("consent", "default", {
       analytics_storage: "denied",
       ad_storage: "denied",
       ad_user_data: "denied",
@@ -50,11 +49,11 @@ function enableGoogleAnalytics(measurementId: string): void {
       functionality_storage: "granted",
       security_storage: "granted",
     });
-    window.gtag("js", new Date());
+    gtag("js", new Date());
     window.__echoesAnalyticsInitialized = true;
   }
 
-  window.gtag("consent", "update", {
+  gtag("consent", "update", {
     analytics_storage: "granted",
     ad_storage: "denied",
     ad_user_data: "denied",
@@ -64,7 +63,7 @@ function enableGoogleAnalytics(measurementId: string): void {
 
   if (!window.__echoesAnalyticsEnabled) {
     window.__echoesAnalyticsEnabled = true;
-    window.gtag("config", measurementId, {
+    gtag("config", measurementId, {
       allow_ad_personalization_signals: false,
       allow_google_signals: false,
       anonymize_ip: true,

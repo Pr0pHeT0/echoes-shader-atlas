@@ -26,11 +26,24 @@ let configuredMeasurementId = GA_MEASUREMENT_ID;
 
 declare global {
   interface Window {
-    dataLayer?: unknown[][];
+    dataLayer?: unknown[];
     gtag?: (...args: unknown[]) => void;
     __echoesAnalyticsEnabled?: boolean;
     __echoesAnalyticsInitialized?: boolean;
   }
+}
+
+/** Install Google's canonical queue shim without loading the remote tag. */
+export function ensureGoogleTagQueue(): ((...args: unknown[]) => void) | null {
+  if (typeof window === "undefined") return null;
+
+  window.dataLayer ??= [];
+  window.gtag ??= function gtag() {
+    // Google expects the function's array-like `arguments` object, not a rest-parameter array.
+    // eslint-disable-next-line prefer-rest-params
+    window.dataLayer?.push(arguments);
+  };
+  return window.gtag;
 }
 
 function parseConsent(value: string | null): AnalyticsConsent {

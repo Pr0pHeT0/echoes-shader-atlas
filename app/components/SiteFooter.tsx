@@ -7,6 +7,7 @@ export function SiteFooter() {
       </div>
       <div className="footer-links">
         <a href="/about">Method &amp; provenance</a>
+        <a href="/privacy">Privacy &amp; analytics</a>
         <a href="/#catalog">All five systems</a>
         <a href="#top">Back to top ↑</a>
       </div>

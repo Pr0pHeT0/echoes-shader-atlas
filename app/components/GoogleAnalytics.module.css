@@ -1,0 +1,91 @@
+.banner {
+  position: fixed;
+  z-index: 100;
+  right: clamp(1rem, 3vw, 2rem);
+  bottom: clamp(1rem, 3vw, 2rem);
+  width: min(31rem, calc(100vw - 2rem));
+  padding: 1.2rem;
+  border: 1px solid var(--line-strong);
+  background: rgba(7, 10, 12, 0.97);
+  box-shadow: 0 1.4rem 4rem rgba(0, 0, 0, 0.48);
+  backdrop-filter: blur(18px);
+}
+
+.label {
+  display: block;
+  margin-bottom: 0.65rem;
+  color: var(--cyan);
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.copy {
+  margin: 0;
+  color: #b7c4c5;
+  font-size: 0.86rem;
+  line-height: 1.65;
+}
+
+.copy a {
+  color: var(--pearl);
+  text-decoration: underline;
+  text-decoration-color: var(--cyan-dim);
+  text-underline-offset: 0.2em;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin-top: 1rem;
+}
+
+.button {
+  min-height: 2.65rem;
+  padding: 0.55rem 0.85rem;
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  color: var(--pearl);
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.button:hover {
+  border-color: var(--pearl);
+}
+
+.primary {
+  border-color: var(--cyan);
+  background: var(--cyan);
+  color: #001014;
+}
+
+.primary:hover {
+  background: transparent;
+  color: var(--cyan);
+}
+
+.preferences {
+  margin-top: 2rem;
+  padding: 1.25rem;
+  border: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.status {
+  margin: 0;
+  color: #d2dcdb;
+  line-height: 1.65;
+}
+
+@media (max-width: 520px) {
+  .actions,
+  .button {
+    width: 100%;
+  }
+}

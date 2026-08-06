@@ -5,7 +5,8 @@ interactive demonstrations with classification, presets, source tabs, provenance
 implementation notes.
 
 The site is built with React, TypeScript, vinext, and Three.js `0.185.0`. It is static by design:
-there are no accounts, uploads, external APIs, analytics, microphone permissions, or persistence.
+there are no accounts, uploads, microphone permissions, or persistence. Optional Google Analytics 4
+measurement is consent-gated and the Google tag is not loaded unless a visitor explicitly accepts.
 
 ## Catalog
 
@@ -51,12 +52,24 @@ vercel deploy --prebuilt --prod --scope echoes
 Vercel project settings are committed in `vercel.json`; Nitro's generated Build Output API files and
 the local project link both live under the intentionally ignored `.vercel` directory.
 
+To enable optional analytics, set the public GA4 web-stream ID at build time. Omitting it disables
+the analytics interface and all event collection:
+
+```bash
+vercel env add NEXT_PUBLIC_GA_MEASUREMENT_ID production --scope echoes
+```
+
+Production canonicals, Open Graph metadata, JSON-LD, `robots.txt`, `sitemap.xml`, and the web app
+manifest all use `https://shader.echoes.art`. Search Console ownership is verified through a DNS TXT
+record; retain that record to keep verification active.
+
 ## Routes
 
 - `/` — immersive reel, classification filters, and the complete effect catalog.
 - `/effects/[slug]` — one live study with presets, playback and quality controls, synthetic-audio
   controls where relevant, source tabs, and implementation notes.
 - `/about` — extraction method, taxonomy, provenance, asset policy, licenses, and contribution guide.
+- `/privacy` — optional analytics disclosure and persistent consent controls.
 
 ## Project map
 

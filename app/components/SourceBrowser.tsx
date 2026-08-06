@@ -3,6 +3,7 @@
 /* eslint-disable jsx-a11y/no-noninteractive-tabindex -- The scrollable source viewport needs a keyboard focus target. */
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { trackEvent } from "@/lib/analytics";
 
 export type DisplayShaderSource = {
   label: string;
@@ -11,7 +12,13 @@ export type DisplayShaderSource = {
   source: string;
 };
 
-export function SourceBrowser({ sources }: { sources: DisplayShaderSource[] }) {
+export function SourceBrowser({
+  effectId,
+  sources,
+}: {
+  effectId: string;
+  sources: DisplayShaderSource[];
+}) {
   const [activePath, setActivePath] = useState(sources[0]?.path ?? "");
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "failed">("idle");
   const copyTimeout = useRef<number | null>(null);
@@ -31,8 +38,18 @@ export function SourceBrowser({ sources }: { sources: DisplayShaderSource[] }) {
     try {
       await navigator.clipboard.writeText(active.source);
       setCopyStatus("copied");
+      trackEvent("source_copy", {
+        effect_id: effectId,
+        result: "success",
+        source_path: active.path,
+      });
     } catch {
       setCopyStatus("failed");
+      trackEvent("source_copy", {
+        effect_id: effectId,
+        result: "failure",
+        source_path: active.path,
+      });
     }
     copyTimeout.current = window.setTimeout(() => setCopyStatus("idle"), 1800);
   }
@@ -59,7 +76,14 @@ export function SourceBrowser({ sources }: { sources: DisplayShaderSource[] }) {
             className={source.path === active.path ? "is-active" : ""}
             type="button"
             aria-pressed={source.path === active.path}
-            onClick={() => setActivePath(source.path)}
+            onClick={() => {
+              setActivePath(source.path);
+              trackEvent("source_tab_select", {
+                effect_id: effectId,
+                source_path: source.path,
+                source_stage: source.stage,
+              });
+            }}
           >
             <span>{source.label}</span>
             <small>{source.stage}</small>

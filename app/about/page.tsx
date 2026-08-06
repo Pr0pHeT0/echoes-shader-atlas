@@ -1,15 +1,51 @@
 import type { Metadata } from "next";
+import { JsonLd } from "../components/JsonLd";
 import { SiteFooter } from "../components/SiteFooter";
 import { SiteHeader } from "../components/SiteHeader";
 import { shaderEffects, shaderSourceUnits } from "@/lib/catalog/effects";
+import {
+  createPageMetadata,
+  SITE_SOURCE_COMMIT,
+  SITE_URL,
+} from "@/lib/site";
 
-export const metadata: Metadata = {
+const description =
+  "How five production shader systems were extracted, classified, relicensed, and adapted into an open-source visual atlas.";
+
+export const metadata: Metadata = createPageMetadata({
   title: "Method & Provenance",
-  description:
-    "How five production shader systems were extracted, classified, relicensed, and adapted into an open-source visual atlas.",
-};
+  description,
+  path: "/about",
+  keywords: ["shader provenance", "shader extraction", "MIT License", "GLSL archive"],
+});
 
-const SOURCE_COMMIT = "d018f6d057c8f30144979bbcc95436cfb405d7c5";
+const aboutStructuredData = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "AboutPage",
+      "@id": `${SITE_URL}/about#page`,
+      url: `${SITE_URL}/about`,
+      name: "Method & Provenance — Echoes Shader Atlas",
+      description,
+      inLanguage: "en",
+      isPartOf: { "@id": `${SITE_URL}/#website` },
+      mainEntity: { "@id": `${SITE_URL}/#organization` },
+      about: [
+        { "@type": "Thing", name: "GLSL shader extraction" },
+        { "@type": "Thing", name: "Open-source software provenance" },
+      ],
+    },
+    {
+      "@type": "BreadcrumbList",
+      "@id": `${SITE_URL}/about#breadcrumb`,
+      itemListElement: [
+        { "@type": "ListItem", position: 1, name: "Shader Atlas", item: `${SITE_URL}/` },
+        { "@type": "ListItem", position: 2, name: "Method & Provenance", item: `${SITE_URL}/about` },
+      ],
+    },
+  ],
+};
 
 export default function AboutPage() {
   const activeCount = shaderEffects.filter((effect) => effect.status === "active").length;
@@ -17,6 +53,7 @@ export default function AboutPage() {
 
   return (
     <div className="site-shell" id="top">
+      <JsonLd id="about-structured-data" data={aboutStructuredData} />
       <SiteHeader />
 
       <main className="page-main">
@@ -75,7 +112,7 @@ export default function AboutPage() {
             <span className="section-label">03 / Provenance</span>
             <h2 id="provenance-heading">A reproducible extraction.</h2>
             <p>
-              All source was read from artifact commit <code>{SOURCE_COMMIT}</code>. The manifest records
+              All source was read from artifact commit <code>{SITE_SOURCE_COMMIT}</code>. The manifest records
               each original path, inline symbol where applicable, shader stage, consuming effect,
               extracted path, and SHA-256 digest.
             </p>

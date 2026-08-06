@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { effectFamilies, shaderEffects } from "@/lib/catalog/effects";
 import type { EffectFamily, EffectId, EffectStatus } from "@/lib/catalog/types";
+import { trackEvent } from "@/lib/analytics";
 import { ShaderStage } from "./ShaderStage";
 
 const driverFilters = ["all", "Pointer", "Synthetic level", "Reveal progress"] as const;
@@ -31,6 +32,25 @@ export function HomeGallery() {
   );
   const [titleLead, titleEnd] = titleParts(selected.name);
 
+  function selectEffect(effectId: EffectId) {
+    setSelectedId(effectId);
+    trackEvent("effect_select", { effect_id: effectId, placement: "home_reel" });
+  }
+
+  function togglePlayback() {
+    const nextPaused = !paused;
+    setPaused(nextPaused);
+    trackEvent("playback_change", {
+      action: nextPaused ? "pause" : "resume",
+      effect_id: selected.id,
+      placement: "home_hero",
+    });
+  }
+
+  function setCatalogFilter(filterType: "family" | "signal" | "state", value: string) {
+    trackEvent("catalog_filter", { filter_type: filterType, filter_value: value });
+  }
+
   return (
     <>
       <section className="atlas-hero" aria-labelledby="hero-title">
@@ -55,10 +75,17 @@ export function HomeGallery() {
             </h1>
             <p className="hero-summary">{selected.summary}</p>
             <div className="hero-actions">
-              <a className="primary-link" href={`/effects/${selected.slug}`}>
+              <a
+                className="primary-link"
+                href={`/effects/${selected.slug}`}
+                onClick={() => trackEvent("study_open", {
+                  effect_id: selected.id,
+                  placement: "home_hero",
+                })}
+              >
                 Explore the system <span aria-hidden="true">↗</span>
               </a>
-              <button className="ghost-button" type="button" onClick={() => setPaused((value) => !value)}>
+              <button className="ghost-button" type="button" onClick={togglePlayback}>
                 {paused ? "Resume motion" : "Pause motion"}
               </button>
             </div>
@@ -75,7 +102,7 @@ export function HomeGallery() {
                 className={effect.id === selected.id ? "is-active" : ""}
                 type="button"
                 aria-pressed={effect.id === selected.id}
-                onClick={() => setSelectedId(effect.id)}
+                onClick={() => selectEffect(effect.id)}
               >
                 <span className="effect-reel__number">{String(effect.index).padStart(2, "0")}</span>
                 <span className="effect-reel__name">{effect.shortName}</span>
@@ -101,23 +128,35 @@ export function HomeGallery() {
 
         <div className="catalog-filters" aria-label="Filter shader systems">
           <FilterRow label="Family">
-            <FilterButton active={family === "all"} onClick={() => setFamily("all")}>All</FilterButton>
+            <FilterButton active={family === "all"} onClick={() => {
+              setFamily("all");
+              setCatalogFilter("family", "all");
+            }}>All</FilterButton>
             {effectFamilies.map((value) => (
-              <FilterButton key={value} active={family === value} onClick={() => setFamily(value)}>
+              <FilterButton key={value} active={family === value} onClick={() => {
+                setFamily(value);
+                setCatalogFilter("family", value);
+              }}>
                 {value}
               </FilterButton>
             ))}
           </FilterRow>
           <FilterRow label="Signal">
             {driverFilters.map((value) => (
-              <FilterButton key={value} active={driver === value} onClick={() => setDriver(value)}>
+              <FilterButton key={value} active={driver === value} onClick={() => {
+                setDriver(value);
+                setCatalogFilter("signal", value);
+              }}>
                 {value === "all" ? "All" : value}
               </FilterButton>
             ))}
           </FilterRow>
           <FilterRow label="State">
             {(["all", "active", "archived"] as const).map((value) => (
-              <FilterButton key={value} active={status === value} onClick={() => setStatus(value)}>
+              <FilterButton key={value} active={status === value} onClick={() => {
+                setStatus(value);
+                setCatalogFilter("state", value);
+              }}>
                 {value === "all" ? "All" : value}
               </FilterButton>
             ))}
@@ -143,7 +182,14 @@ export function HomeGallery() {
                 </div>
                 <h3>{effect.name}</h3>
                 <p>{effect.summary}</p>
-                <a className="effect-card__link" href={`/effects/${effect.slug}`}>
+                <a
+                  className="effect-card__link"
+                  href={`/effects/${effect.slug}`}
+                  onClick={() => trackEvent("study_open", {
+                    effect_id: effect.id,
+                    placement: "catalog_card",
+                  })}
+                >
                   Open study <span aria-hidden="true">→</span>
                 </a>
               </div>

@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import type { ShaderEffectMeta } from "@/lib/catalog/types";
 import { effectShaderSources } from "@/lib/effects/source-registry";
+import { trackEvent } from "@/lib/analytics";
 import { ShaderStage, type ShaderStageAudio, type ShaderStageQuality } from "./ShaderStage";
 import { SourceBrowser } from "./SourceBrowser";
 
@@ -33,8 +34,54 @@ export function EffectDetail({ effect }: { effect: ShaderEffectMeta }) {
   );
 
   function setAudioBand(band: keyof ShaderStageAudio, value: number) {
+    if (automaticAudio) {
+      trackEvent("synthetic_audio_mode", {
+        effect_id: effect.id,
+        mode: "manual",
+        trigger: band,
+      });
+    }
     setAutomaticAudio(false);
     setAudio((current) => ({ ...current, [band]: value }));
+  }
+
+  function selectPreset(candidateId: string) {
+    setPreset(candidateId);
+    trackEvent("preset_change", { effect_id: effect.id, preset_id: candidateId });
+  }
+
+  function togglePlayback() {
+    const nextPaused = !paused;
+    setPaused(nextPaused);
+    trackEvent("playback_change", {
+      action: nextPaused ? "pause" : "play",
+      effect_id: effect.id,
+      placement: "effect_detail",
+    });
+  }
+
+  function restartPlayback() {
+    setRestartKey((value) => value + 1);
+    trackEvent("playback_change", {
+      action: "restart",
+      effect_id: effect.id,
+      placement: "effect_detail",
+    });
+  }
+
+  function selectQuality(value: ShaderStageQuality) {
+    setQuality(value);
+    trackEvent("quality_change", { effect_id: effect.id, quality: value });
+  }
+
+  function toggleAutomaticAudio() {
+    const nextAutomatic = !automaticAudio;
+    setAutomaticAudio(nextAutomatic);
+    trackEvent("synthetic_audio_mode", {
+      effect_id: effect.id,
+      mode: nextAutomatic ? "automatic" : "manual",
+      trigger: "button",
+    });
   }
 
   return (
@@ -69,7 +116,7 @@ export function EffectDetail({ effect }: { effect: ShaderEffectMeta }) {
                 type="button"
                 aria-pressed={candidate.id === preset}
                 title={candidate.description}
-                onClick={() => setPreset(candidate.id)}
+                onClick={() => selectPreset(candidate.id)}
               >
                 {candidate.label}
               </button>
@@ -77,10 +124,10 @@ export function EffectDetail({ effect }: { effect: ShaderEffectMeta }) {
           </div>
           <div className="control-group" role="group" aria-label="Playback">
             <span className="control-group__label">Playback</span>
-            <button className="control-button" type="button" onClick={() => setPaused((value) => !value)}>
+            <button className="control-button" type="button" onClick={togglePlayback}>
               {paused ? "Play" : "Pause"}
             </button>
-            <button className="control-button" type="button" onClick={() => setRestartKey((value) => value + 1)}>
+            <button className="control-button" type="button" onClick={restartPlayback}>
               Restart
             </button>
           </div>
@@ -92,7 +139,7 @@ export function EffectDetail({ effect }: { effect: ShaderEffectMeta }) {
                 className={`control-button${quality === value ? " is-active" : ""}`}
                 type="button"
                 aria-pressed={quality === value}
-                onClick={() => setQuality(value)}
+                onClick={() => selectQuality(value)}
               >
                 {value}
               </button>
@@ -153,7 +200,7 @@ export function EffectDetail({ effect }: { effect: ShaderEffectMeta }) {
               className={`ghost-button${automaticAudio ? " is-active" : ""}`}
               type="button"
               aria-pressed={automaticAudio}
-              onClick={() => setAutomaticAudio((value) => !value)}
+              onClick={toggleAutomaticAudio}
             >
               {automaticAudio ? "Automatic signal on" : "Use automatic signal"}
             </button>
@@ -181,7 +228,7 @@ export function EffectDetail({ effect }: { effect: ShaderEffectMeta }) {
           </section>
         ) : null}
 
-        <SourceBrowser sources={sources} />
+        <SourceBrowser effectId={effect.id} sources={sources} />
       </div>
     </>
   );

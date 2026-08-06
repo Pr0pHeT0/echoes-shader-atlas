@@ -109,7 +109,7 @@ test("catalog SEO copy is unique, bounded, connected, and serializable", async (
   const keywords = new Set();
 
   for (const effect of shaderEffects) {
-    const renderedTitle = `${effect.seo.title} | Echoes Shader Atlas`;
+    const renderedTitle = `${effect.seo.title} | Echoes Shaders`;
     assert.ok(renderedTitle.length >= 45 && renderedTitle.length <= 60, renderedTitle);
     assert.ok(
       effect.seo.description.length >= 145 && effect.seo.description.length <= 160,

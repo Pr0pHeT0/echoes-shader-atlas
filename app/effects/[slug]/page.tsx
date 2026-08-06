@@ -96,7 +96,7 @@ export default async function EffectPage({ params }: EffectPageProps) {
         "@type": "WebPage",
         "@id": `${effectUrl}#page`,
         url: effectUrl,
-        name: `${effect.name} — Echoes Shader Atlas`,
+        name: `${effect.name} — Echoes Shaders`,
         description: effect.summary,
         datePublished: SITE_PUBLISHED_DATE,
         dateModified: SITE_UPDATED_DATE,
@@ -109,7 +109,7 @@ export default async function EffectPage({ params }: EffectPageProps) {
         "@type": "BreadcrumbList",
         "@id": `${effectUrl}#breadcrumb`,
         itemListElement: [
-          { "@type": "ListItem", position: 1, name: "Shader Atlas", item: `${SITE_URL}/` },
+          { "@type": "ListItem", position: 1, name: "Echoes Shaders", item: `${SITE_URL}/` },
           { "@type": "ListItem", position: 2, name: effect.name, item: effectUrl },
         ],
       },
@@ -126,7 +126,7 @@ export default async function EffectPage({ params }: EffectPageProps) {
           <div className="related-studies__heading">
             <div>
               <span className="section-kicker">Related shader studies</span>
-              <h2 id="related-studies-title">Continue through the atlas.</h2>
+              <h2 id="related-studies-title">Continue through the shaders.</h2>
             </div>
             <p>
               Compare another Three.js shader example by its input signal, point pipeline, and

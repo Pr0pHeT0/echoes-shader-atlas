@@ -203,7 +203,7 @@ export function EffectDetail({ effect }: { effect: ShaderEffectMeta }) {
                 {usesAshimaNoise ? "; the shared 4D simplex dependency retains the Ashima MIT notice" : ""}.
               </p>
               <p>
-                <strong>Atlas adaptation</strong>
+                <strong>Open-source adaptation</strong>
                 {effect.seo.adaptation}
               </p>
             </div>

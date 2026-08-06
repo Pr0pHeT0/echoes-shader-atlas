@@ -4,13 +4,13 @@ import { HomeGallery } from "./components/HomeGallery";
 import { SiteFooter } from "./components/SiteFooter";
 import { SiteHeader } from "./components/SiteHeader";
 import { shaderEffects } from "@/lib/catalog/effects";
-import { createPageMetadata, SITE_DESCRIPTION, SITE_URL } from "@/lib/site";
+import { createPageMetadata, SITE_DESCRIPTION, SITE_NAME, SITE_URL } from "@/lib/site";
 
 export const metadata: Metadata = createPageMetadata({
-  title: "Open-Source Three.js Shader Examples",
+  title: "Open-Source GLSL Shader Examples",
   path: "/",
   description: SITE_DESCRIPTION,
-  keywords: ["shader gallery", "Three.js examples", "WebGL demos"],
+  keywords: ["GLSL shader gallery", "Three.js examples", "WebGL demos"],
 });
 
 const collectionStructuredData = {
@@ -20,8 +20,8 @@ const collectionStructuredData = {
       "@type": "CollectionPage",
       "@id": `${SITE_URL}/#collection`,
       url: `${SITE_URL}/`,
-      name: "Echoes Shader Atlas",
-      headline: "Open-source Three.js shaders, made legible.",
+      name: SITE_NAME,
+      headline: "Open-source GLSL shaders, made legible.",
       description: SITE_DESCRIPTION,
       inLanguage: "en",
       isPartOf: { "@id": `${SITE_URL}/#website` },

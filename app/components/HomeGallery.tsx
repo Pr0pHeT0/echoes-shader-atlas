@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { effectFamilies, shaderEffects } from "@/lib/catalog/effects";
 import type { EffectFamily, EffectId, EffectStatus } from "@/lib/catalog/types";
 import { trackEvent } from "@/lib/analytics";
+import { SITE_GITHUB_URL } from "@/lib/site";
 import { ShaderStage } from "./ShaderStage";
 
 const driverFilters = ["all", "Pointer", "Synthetic level", "Reveal progress"] as const;
@@ -13,7 +14,6 @@ export function HomeGallery() {
   const [family, setFamily] = useState<EffectFamily | "all">("all");
   const [driver, setDriver] = useState<(typeof driverFilters)[number]>("all");
   const [status, setStatus] = useState<EffectStatus | "all">("all");
-  const [paused, setPaused] = useState(false);
 
   const selected = shaderEffects.find((effect) => effect.id === selectedId) ?? shaderEffects[0];
   const filtered = useMemo(
@@ -30,16 +30,6 @@ export function HomeGallery() {
     trackEvent("effect_select", { effect_id: effectId, placement: "home_reel" });
   }
 
-  function togglePlayback() {
-    const nextPaused = !paused;
-    setPaused(nextPaused);
-    trackEvent("playback_change", {
-      action: nextPaused ? "pause" : "resume",
-      effect_id: selected.id,
-      placement: "home_hero",
-    });
-  }
-
   function setCatalogFilter(filterType: "family" | "signal" | "state", value: string) {
     trackEvent("catalog_filter", { filter_type: filterType, filter_value: value });
   }
@@ -50,7 +40,6 @@ export function HomeGallery() {
         <ShaderStage
           effectId={selected.id}
           preset={selected.presets[0]?.id}
-          paused={paused}
           syntheticAudio
           label={`${selected.name} live shader preview`}
         />
@@ -61,19 +50,18 @@ export function HomeGallery() {
               <strong>{String(selected.index).padStart(2, "0")}</strong>
               <span aria-hidden="true" />
               <span>{selected.family}</span>
-              {selected.status === "archived" ? <span>Recovered system</span> : null}
+              {selected.status === "archived" ? <span>Archived study</span> : null}
             </div>
             <h1 className="hero-title" id="hero-title">
-              Open-source <span>Three.js shaders.</span>
+              Open-source <span>GLSL shaders.</span>
             </h1>
             <div className="hero-study-heading" aria-live="polite">
               <span>Featured study</span>
               <h2>{selected.name}</h2>
             </div>
             <p className="hero-summary">
-              Explore five production shader systems rebuilt as live WebGL2 studies, with readable
-              GLSL source, interactive controls, reproducible provenance, and MIT-licensed project
-              code. Now viewing: {selected.summary}
+              Explore five live WebGL2 studies with readable GLSL source, interactive controls,
+              implementation notes, and MIT-licensed project code. Now viewing: {selected.summary}
             </p>
             <div className="hero-actions">
               <a
@@ -86,9 +74,6 @@ export function HomeGallery() {
               >
                 Explore {selected.shortName} <span aria-hidden="true">↗</span>
               </a>
-              <button className="ghost-button" type="button" onClick={togglePlayback}>
-                {paused ? "Resume motion" : "Pause motion"}
-              </button>
             </div>
           </div>
 
@@ -117,13 +102,12 @@ export function HomeGallery() {
       <section className="catalog-section" id="catalog" aria-labelledby="catalog-title">
         <div className="catalog-heading">
           <div>
-            <span className="section-kicker">Classified index</span>
-            <h2 id="catalog-title">Five open-source shader examples.<br />No black boxes.</h2>
+            <span className="section-kicker">Shader index</span>
+            <h2 id="catalog-title">Open source shaders.</h2>
           </div>
           <p>
-            Every entry maps a production visual back to its render primitive, input signal,
-            motion model, and original source units. Filter the recovered set, then open any
-            study to inspect the GLSL.
+            Compare each shader by its render primitive, input signal, motion model, and GPU
+            pipeline. Filter the collection, then open any study to inspect the GLSL.
           </p>
         </div>
 
@@ -169,7 +153,10 @@ export function HomeGallery() {
             <article
               className="effect-card"
               key={effect.id}
-              style={{ "--card-accent": effect.accent.primary } as React.CSSProperties}
+              style={{
+                "--card-accent": effect.accent.primary,
+                "--card-image": `url("/effect-previews/${effect.slug}.png")`,
+              } as React.CSSProperties}
             >
               <div className="effect-card__visual" aria-hidden="true" />
               <span className="effect-card__number" aria-hidden="true">
@@ -202,24 +189,23 @@ export function HomeGallery() {
         </div>
       </section>
 
-      <section className="editorial-section" aria-labelledby="method-title">
+      <section className="editorial-section" aria-labelledby="open-source-title">
         <div className="editorial-section__copy">
-          <span className="section-kicker">Extraction method</span>
-          <h2 id="method-title">Preserve the math.<br />Replace the baggage.</h2>
+          <span className="section-kicker">Fully open source</span>
+          <h2 id="open-source-title">Read the code.<br />Remix the shaders.</h2>
           <p>
-            The shader bodies, uniforms, blend modes, and timing stay intact. Product-specific
-            models are replaced by seeded geometry, and every recovered source maps to a public,
-            reviewable manifest.
+            Every shader, runtime, control, procedural geometry generator, and test lives in the
+            public repository under the MIT License. Fork it, study it, and make it your own.
           </p>
-          <a className="text-link" href="/about">
-            Read the methodology <span aria-hidden="true">↗</span>
+          <a className="text-link" href={SITE_GITHUB_URL} target="_blank" rel="noreferrer">
+            Explore the GitHub repository <span aria-hidden="true">↗</span>
           </a>
         </div>
-        <div className="editorial-stats" aria-label="Extraction statistics">
-          <div className="editorial-stat"><strong>05</strong><span>Distinct visual systems</span></div>
-          <div className="editorial-stat"><strong>13</strong><span>Original shader source units</span></div>
-          <div className="editorial-stat"><strong>07</strong><span>GPU programs reconstructed</span></div>
-          <div className="editorial-stat"><strong>MIT</strong><span>Project code license</span></div>
+        <div className="editorial-stats" aria-label="Open-source project statistics">
+          <div className="editorial-stat"><strong>05</strong><span>Open-source shader studies</span></div>
+          <div className="editorial-stat"><strong>13</strong><span>Readable GLSL source units</span></div>
+          <div className="editorial-stat"><strong>07</strong><span>Documented GPU programs</span></div>
+          <div className="editorial-stat"><strong>MIT</strong><span>Permissive project license</span></div>
         </div>
       </section>
     </>

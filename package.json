@@ -1,7 +1,7 @@
 {
   "name": "echoes-shader-atlas",
   "version": "0.1.0",
-  "description": "An open-source visual atlas of production GLSL and Three.js shader effects.",
+  "description": "An open-source visual library of production GLSL and Three.js shader effects.",
   "license": "MIT",
   "private": true,
   "engines": {

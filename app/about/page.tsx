@@ -34,7 +34,7 @@ const aboutStructuredData = {
       "@type": "AboutPage",
       "@id": `${SITE_URL}/about#page`,
       url: `${SITE_URL}/about`,
-      name: "Method & Provenance — Echoes Shader Atlas",
+      name: "Method & Provenance — Echoes Shaders",
       description,
       inLanguage: "en",
       isPartOf: { "@id": `${SITE_URL}/#website` },
@@ -49,7 +49,7 @@ const aboutStructuredData = {
       "@type": "BreadcrumbList",
       "@id": `${SITE_URL}/about#breadcrumb`,
       itemListElement: [
-        { "@type": "ListItem", position: 1, name: "Shader Atlas", item: `${SITE_URL}/` },
+        { "@type": "ListItem", position: 1, name: "Echoes Shaders", item: `${SITE_URL}/` },
         { "@type": "ListItem", position: 2, name: "Method & Provenance", item: `${SITE_URL}/about` },
       ],
     },
@@ -76,7 +76,7 @@ export default function AboutPage() {
           </div>
           <div>
             <p className="lead">
-              Echoes Shader Atlas separates five visual systems from their original product context,
+              Echoes Shaders separates five visual systems from their original product context,
               preserves their shader logic, and presents each one as a documented, inspectable study.
             </p>
             <a className="text-link" href="/#catalog">
@@ -163,7 +163,7 @@ export default function AboutPage() {
               Materialization uses a segmented torus knot.
             </p>
             <p>
-              Synthetic audio drives all reactive demonstrations, so the atlas never asks for microphone
+              Synthetic audio drives all reactive demonstrations, so the site never asks for microphone
               access or ships recordings. The particle title changes only its copy, from the original
               product wordmark to the neutral word ECHOES.
             </p>
@@ -173,7 +173,7 @@ export default function AboutPage() {
             <span className="section-label">05 / Licensing</span>
             <h2 id="license-heading">Open, with attribution intact.</h2>
             <p>
-              Atlas code and first-party extracted shaders are released under the MIT License. The 4D
+              Site code and first-party extracted shaders are released under the MIT License. The 4D
               simplex implementation by Ian McEwan and Ashima Arts retains its MIT notice.
             </p>
             <p>

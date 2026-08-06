@@ -13,8 +13,8 @@ export default function NotFound() {
       <SiteHeader />
       <main className="not-found">
         <span className="section-kicker">404 / Unclassified signal</span>
-        <h1>This shader is not in the atlas.</h1>
-        <p>The requested study may have moved, or it was never part of the five recovered systems.</p>
+        <h1>This shader is not in the collection.</h1>
+        <p>The requested study may have moved, or it is not part of the five open-source systems.</p>
         <a className="primary-link" href="/">
           Return to the index <span aria-hidden="true">→</span>
         </a>

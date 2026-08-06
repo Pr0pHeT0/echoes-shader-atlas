@@ -101,7 +101,7 @@ export function GoogleAnalyticsClient({ measurementId }: { measurementId: string
     <aside className={styles.banner} aria-label="Analytics preferences">
       <span className={styles.label}>Optional analytics</span>
       <p className={styles.copy}>
-        Help improve the atlas by allowing limited Google Analytics usage data. The tag stays
+        Help improve the site by allowing limited Google Analytics usage data. The tag stays
         unloaded unless you accept. <a href="/privacy">Read the privacy details</a>.
       </p>
       <div className={styles.actions}>

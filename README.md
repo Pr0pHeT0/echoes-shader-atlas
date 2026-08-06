@@ -1,6 +1,6 @@
-# Echoes Shader Atlas
+# Echoes Shaders
 
-An open-source field guide to five production WebGL shader systems. The atlas pairs live,
+An open-source field guide to five production WebGL shader systems. The project pairs live,
 interactive demonstrations with classification, presets, source tabs, provenance, and practical
 implementation notes.
 

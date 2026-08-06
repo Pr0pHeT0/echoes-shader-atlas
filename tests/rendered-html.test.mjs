@@ -52,13 +52,16 @@ async function renderedHtml(pathname, expectedStatus = 200) {
 test("server-renders the complete classified atlas landing route", async () => {
   const html = await renderedHtml("/");
 
-  assert.match(html, /<title>Open-Source Three\.js Shader Examples \| Echoes Shader Atlas<\/title>/i);
-  assert.match(html, /<h1[^>]*>\s*Open-source[\s\S]*Three\.js shaders\./i);
-  assert.match(html, /Echoes Shader Atlas/i);
+  assert.match(html, /<title>Open-Source GLSL Shader Examples \| Echoes Shaders<\/title>/i);
+  assert.match(html, /<h1[^>]*>\s*Open-source[\s\S]*GLSL shaders\./i);
+  assert.match(html, /Echoes Shaders/i);
+  assert.match(html, /Open source shaders\./i);
+  assert.doesNotMatch(html, /Pause motion/i);
   assert.match(html, /<main\b/i);
   for (const effectId of EFFECT_IDS) {
     assert.match(html, new RegExp(effectNames.get(effectId), "i"));
     assert.match(html, new RegExp(`href=["']/effects/${effectId}["']`, "i"));
+    assert.match(html, new RegExp(`/effect-previews/${effectId}\\.png`, "i"));
   }
   assert.match(html, /Procedural Backdrop/i);
   assert.match(html, /Audio Visualization/i);
@@ -77,7 +80,7 @@ test("server-renders every effect permalink with its own classified content", as
       assert.match(html, /Source|GLSL/i);
       assert.match(html, /Preset/i);
       assert.match(html, /WebGL2/i);
-      assert.match(html, /Echoes Shader Atlas/i);
+      assert.match(html, /Echoes Shaders/i);
       assert.match(html, /<meta[^>]+property=["']og:image["'][^>]+og\.png/i);
       assert.match(html, /<meta[^>]+name=["']twitter:image["'][^>]+og\.png/i);
     });

@@ -6,7 +6,7 @@ import { SiteHeader } from "../components/SiteHeader";
 import { createPageMetadata, SITE_URL } from "@/lib/site";
 
 const description =
-  "Learn how Echoes Shader Atlas uses consent-gated Google Analytics, local browser preferences, limited event data, synthetic audio, and privacy controls.";
+  "Learn how Echoes Shaders uses consent-gated Google Analytics, local browser preferences, limited event data, synthetic audio, and privacy controls.";
 
 export const metadata = createPageMetadata({
   path: "/privacy",
@@ -19,7 +19,7 @@ const privacyStructuredData = {
   "@type": "WebPage",
   "@id": `${SITE_URL}/privacy#page`,
   url: `${SITE_URL}/privacy`,
-  name: "Privacy — Echoes Shader Atlas",
+  name: "Privacy — Echoes Shaders",
   description,
   inLanguage: "en",
   isPartOf: { "@id": `${SITE_URL}/#website` },
@@ -40,11 +40,11 @@ export default function PrivacyPage() {
           </div>
           <div>
             <p className="lead">
-              The shader atlas works without accounts, uploads, microphone access, or analytics.
+              The shader site works without accounts, uploads, microphone access, or analytics.
               Optional measurement runs only after you choose to allow it.
             </p>
             <a className="text-link" href="/">
-              Return to the atlas <span aria-hidden="true">↗</span>
+              Return to the shaders <span aria-hidden="true">↗</span>
             </a>
           </div>
         </section>
@@ -55,7 +55,7 @@ export default function PrivacyPage() {
             <h2 id="analytics-heading">Google Analytics stays off by default.</h2>
             <p>
               The Google Analytics 4 tag is not downloaded until you select “Accept analytics.” If
-              you decline, the atlas stores that choice locally and does not start the tag.
+              you decline, the site stores that choice locally and does not start the tag.
             </p>
             <p>
               When allowed, measurement covers route views and a small set of product interactions:
@@ -68,7 +68,7 @@ export default function PrivacyPage() {
             <span className="section-label">02 / Data boundaries</span>
             <h2 id="data-heading">No identity fields. No microphone data.</h2>
             <p>
-              The atlas does not send names, email addresses, account identifiers, typed content,
+              The site does not send names, email addresses, account identifiers, typed content,
               microphone input, or shader source to analytics. Event details are limited to fixed
               catalog labels and control choices.
             </p>

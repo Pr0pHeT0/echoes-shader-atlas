@@ -1,4 +1,4 @@
-# Contributing to Echoes Shader Atlas
+# Contributing to Echoes Shaders
 
 Thanks for helping make realtime graphics easier to study. Contributions should improve the archive
 without obscuring where the work came from or making the demo unsafe to open.

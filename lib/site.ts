@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 
-export const SITE_NAME = "Echoes Shader Atlas";
+export const SITE_NAME = "Echoes Shaders";
 export const SITE_URL = "https://shader.echoes.art";
 export const SITE_DESCRIPTION =
-  "Explore five open-source Three.js shader examples with live WebGL2 demos and readable GLSL source: aurora, audio particles, type morphs, and GPGPU reveals.";
+  "Explore five open-source GLSL shader examples built with Three.js: live WebGL2 aurora, audio particles, type morphs, and GPGPU reveals with readable source.";
 export const SITE_SOCIAL_DESCRIPTION =
-  "Live Three.js and WebGL2 shader studies with readable GLSL source, interactive controls, and reproducible provenance.";
+  "Live GLSL and WebGL2 shader studies with readable source, interactive controls, and open Three.js implementations.";
 export const SITE_GITHUB_URL = "https://github.com/Pr0pHeT0/echoes-shader-atlas";
 export const SITE_MAINTAINER_NAME = "Pr0pHeT0";
 export const SITE_MAINTAINER_URL = "https://github.com/Pr0pHeT0";
@@ -41,7 +41,7 @@ type PageMetadataOptions = {
   keywords?: readonly string[];
 };
 
-/** Build consistent, production-canonical metadata for a public Atlas route. */
+/** Build consistent, production-canonical metadata for a public site route. */
 export function createPageMetadata({
   title,
   description = SITE_DESCRIPTION,
@@ -68,7 +68,7 @@ export function createPageMetadata({
           url: SITE_SOCIAL_IMAGE,
           width: 1200,
           height: 630,
-          alt: "Echoes Shader Atlas particle orb opening into a procedural terrain",
+          alt: "Echoes Shaders particle orb opening into procedural terrain",
         },
       ],
     },

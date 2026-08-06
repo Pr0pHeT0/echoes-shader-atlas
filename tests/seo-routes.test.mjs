@@ -137,7 +137,7 @@ test("web app manifest describes the production atlas and is linked from HTML", 
   assert.equal(manifestResponse.status, 200);
   assert.match(manifestResponse.headers.get("content-type") ?? "", /(?:manifest|json)/i);
   const manifest = await manifestResponse.json();
-  assert.match(manifest.name, /Echoes Shader Atlas/i);
+  assert.match(manifest.name, /Echoes Shaders/i);
   assert.ok(typeof manifest.short_name === "string" && manifest.short_name.length > 0);
   assert.equal(manifest.start_url, "/");
   assert.ok(["standalone", "minimal-ui"].includes(manifest.display));
@@ -203,7 +203,7 @@ test("homepage and effect pages expose search intent and descriptive internal li
   const homeHtml = await (await fetchRoute("/", "text/html")).text();
   const homeH1 = textContent(homeHtml.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i)?.[1] ?? "");
   assert.match(homeH1, /open-source/i);
-  assert.match(homeH1, /Three\.js shaders/i);
+  assert.match(homeH1, /GLSL shaders/i);
   assert.doesNotMatch(homeH1, /^Aurora Field$/i);
 
   for (const effectId of EFFECT_IDS) {

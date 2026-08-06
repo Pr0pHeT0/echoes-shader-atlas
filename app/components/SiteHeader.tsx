@@ -9,7 +9,7 @@ export function SiteHeader({ floating = false }: { floating?: boolean }) {
         </span>
         <span className="wordmark-copy">
           <strong>Echoes</strong>
-          <small>Shader Atlas</small>
+          <small>GLSL Shaders</small>
         </span>
       </a>
       <nav className="site-nav" aria-label="Primary navigation">

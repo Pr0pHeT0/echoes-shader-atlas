@@ -59,7 +59,7 @@ export const metadata: Metadata = {
         url: SITE_SOCIAL_IMAGE,
         width: 1200,
         height: 630,
-        alt: "Echoes Shader Atlas particle orb opening into a procedural terrain",
+        alt: "Echoes Shaders particle orb opening into procedural terrain",
       },
     ],
   },
@@ -95,7 +95,7 @@ const siteStructuredData = {
       "@id": `${SITE_URL}/#organization`,
       name: SITE_NAME,
       url: `${SITE_URL}/`,
-      description: "An open-source archive and visual showcase for production shader systems.",
+      description: "An open-source library and visual showcase for GLSL shader systems.",
       sameAs: [SITE_GITHUB_URL],
       founder: {
         "@type": "Person",

@@ -10,7 +10,7 @@ export function Breadcrumbs({ current, floating = false }: BreadcrumbsProps) {
       aria-label="Breadcrumb"
     >
       <ol>
-        <li><a href="/">Shader Atlas</a></li>
+        <li><a href="/">Echoes Shaders</a></li>
         <li aria-hidden="true">/</li>
         <li aria-current="page">{current}</li>
       </ol>

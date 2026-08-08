@@ -17,6 +17,7 @@ const publicRoutes = [
   "/effects/morphing-echoes-title",
   "/effects/orb-to-scene-reveal",
   "/effects/audio-reactive-materialization",
+  "/effects/stylized-materialization",
   "/robots.txt",
   "/sitemap.xml",
   "/manifest.webmanifest",

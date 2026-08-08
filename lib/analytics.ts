@@ -11,7 +11,8 @@ export type AnalyticsEventName =
   | "source_copy"
   | "source_tab_select"
   | "study_open"
-  | "synthetic_audio_mode";
+  | "synthetic_audio_mode"
+  | "target_change";
 
 export type AnalyticsEventParameters = Record<
   string,

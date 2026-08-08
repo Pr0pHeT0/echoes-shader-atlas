@@ -5,7 +5,12 @@ import type { WebGPURenderer } from "three/webgpu";
 import { createEffectRuntime } from "@/lib/effects/runtime-registry";
 import { ShaderStageController } from "@/lib/effects/stage-controller";
 import type { StageEnvironment, StageQuality } from "@/lib/effects/stage-controller";
-import type { AudioMetrics, EffectId, MaterializationPointCloud } from "@/lib/effects/types";
+import type {
+  AudioMetrics,
+  EffectId,
+  MaterializationPointCloud,
+  StylizedPointTarget,
+} from "@/lib/effects/types";
 
 export type ShaderStageAudio = AudioMetrics;
 export type ShaderStageQuality = StageQuality;
@@ -20,6 +25,7 @@ type ShaderStageProps = {
   syntheticAudio?: boolean;
   audio?: ShaderStageAudio;
   pointCloud?: MaterializationPointCloud | null;
+  pointTarget?: StylizedPointTarget;
   label: string;
 };
 
@@ -53,19 +59,36 @@ export function ShaderStage({
   syntheticAudio = false,
   audio = ZERO_AUDIO,
   pointCloud = null,
+  pointTarget,
   label,
 }: ShaderStageProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const controllerRef = useRef<ShaderStageController | null>(null);
   const mountedEffectRef = useRef(effectId);
-  const latestPropsRef = useRef({ effectId, preset, paused, syntheticAudio, audio, pointCloud });
+  const latestPropsRef = useRef({
+    effectId,
+    preset,
+    paused,
+    syntheticAudio,
+    audio,
+    pointCloud,
+    pointTarget,
+  });
   const [failure, setFailure] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    latestPropsRef.current = { effectId, preset, paused, syntheticAudio, audio, pointCloud };
-  }, [audio, effectId, paused, pointCloud, preset, syntheticAudio]);
+    latestPropsRef.current = {
+      effectId,
+      preset,
+      paused,
+      syntheticAudio,
+      audio,
+      pointCloud,
+      pointTarget,
+    };
+  }, [audio, effectId, paused, pointCloud, pointTarget, preset, syntheticAudio]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -96,6 +119,7 @@ export function ShaderStage({
           syntheticAudio: initial.syntheticAudio,
           audio: initial.audio,
           pointCloud: initial.pointCloud,
+          pointTarget: initial.pointTarget,
           createRenderer: (stageCanvas, stageQuality) => {
             const renderer = new THREE.WebGPURenderer({
               canvas: stageCanvas as HTMLCanvasElement,
@@ -161,7 +185,11 @@ export function ShaderStage({
   }, [audio]);
 
   return (
-    <div className="shader-stage" ref={hostRef} aria-busy={loading}>
+    <div
+      className={`shader-stage shader-stage--${effectId}${preset ? ` shader-stage--preset-${preset}` : ""}${paused ? " shader-stage--paused" : ""}`}
+      ref={hostRef}
+      aria-busy={loading}
+    >
       <canvas
         ref={canvasRef}
         role="img"

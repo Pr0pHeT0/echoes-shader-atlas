@@ -60,8 +60,8 @@ export function HomeGallery() {
               <h2>{selected.name}</h2>
             </div>
             <p className="hero-summary">
-              Five live WebGPU studies with automatic WebGL2 fallback, readable GLSL, and interactive
-              controls. Now viewing: {selected.summary}
+              Five recovered shader systems plus one authored point-field study, with live WebGPU, automatic
+              WebGL2 fallback, readable GLSL, and interactive controls. Now viewing: {selected.summary}
             </p>
             <div className="hero-actions">
               <a
@@ -80,7 +80,7 @@ export function HomeGallery() {
           <div className="effect-reel" aria-label="Choose a shader system">
             <div className="effect-reel__label">
               <span>Live index</span>
-              <span>05 systems</span>
+              <span>06 studies</span>
             </div>
             {shaderEffects.map((effect) => (
               <button
@@ -192,7 +192,7 @@ export function HomeGallery() {
       <section className="editorial-section" aria-labelledby="open-source-title">
         <div className="editorial-section__copy">
           <span className="section-kicker">Fully open source</span>
-          <h2 id="open-source-title">Read the code.<br />Remix the shaders.</h2>
+          <h2 id="open-source-title">Remix the shaders.</h2>
           <p>
             Every shader, runtime, control, procedural geometry generator, and test lives in the
             public repository under the MIT License. Fork it, study it, and make it your own.
@@ -202,7 +202,7 @@ export function HomeGallery() {
           </a>
         </div>
         <div className="editorial-stats" aria-label="Open-source project statistics">
-          <div className="editorial-stat"><strong>05</strong><span>Open-source shader studies</span></div>
+          <div className="editorial-stat"><strong>06</strong><span>Open-source shader studies</span></div>
           <div className="editorial-stat"><strong>13</strong><span>Readable GLSL source units</span></div>
           <div className="editorial-stat"><strong>07</strong><span>Documented GPU programs</span></div>
           <div className="editorial-stat"><strong>MIT</strong><span>Permissive project license</span></div>

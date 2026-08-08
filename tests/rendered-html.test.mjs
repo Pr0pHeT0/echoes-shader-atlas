@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { EFFECT_IDS, SOURCE_COMMIT } from "../scripts/audit-extraction.mjs";
+import { EFFECT_IDS } from "../lib/effects/types.ts";
+import { SOURCE_COMMIT } from "../scripts/audit-extraction.mjs";
 
 const developmentPreviewMeta =
   /<meta(?=[^>]*\bname=["']codex-preview["'])(?=[^>]*\bcontent=["']development["'])[^>]*>/i;
@@ -11,6 +12,7 @@ const effectNames = new Map([
   ["morphing-echoes-title", "Morphing Echoes Title"],
   ["orb-to-scene-reveal", "Orb-to-Scene Reveal"],
   ["audio-reactive-materialization", "Point-Cloud Materialization"],
+  ["stylized-materialization", "Stylized Point Field"],
 ]);
 
 let workerPromise;
@@ -68,6 +70,7 @@ test("server-renders the complete classified atlas landing route", async () => {
   assert.match(html, /Particle Typography/i);
   assert.match(html, /Point-cloud Transition/i);
   assert.match(html, /GPGPU Materialization/i);
+  assert.match(html, /Point-Cloud Styling/i);
   assert.doesNotMatch(html, developmentPreviewMeta);
   assert.doesNotMatch(html, /Your site is taking shape|Building your site|react-loading-skeleton/i);
 });
@@ -83,14 +86,37 @@ test("server-renders every effect permalink with its own classified content", as
       assert.match(html, /WebGPU/i);
       assert.match(html, /WebGL2/i);
       assert.match(html, /Echoes Shaders/i);
-      assert.match(html, /<meta[^>]+property=["']og:image["'][^>]+og\.png/i);
-      assert.match(html, /<meta[^>]+name=["']twitter:image["'][^>]+og\.png/i);
-      if (effectId === "audio-reactive-materialization") {
-        assert.match(html, /Materialize your own model/i);
+      const socialImage =
+        effectId === "stylized-materialization"
+          ? /og-stylized-point-field\.png/i
+          : /\/og\.png/i;
+      assert.match(html.match(/<meta[^>]+property=["']og:image["'][^>]+/i)?.[0] ?? "", socialImage);
+      assert.match(html.match(/<meta[^>]+name=["']twitter:image["'][^>]+/i)?.[0] ?? "", socialImage);
+      if (effectId === "stylized-materialization") {
+        assert.match(html, /tangent neon ribbons/i);
+        assert.match(html, /binary SDF glyphs/i);
+        assert.match(html, /shared blurred pigment mask/i);
+        assert.match(html, /aria-label=["']Target["']/i);
+        assert.match(html, />\s*Base\s*</i);
+        assert.match(html, />\s*Terrain\s*</i);
+        assert.match(html, /Upload…|Uploaded/i);
+      }
+      if (["audio-reactive-materialization", "stylized-materialization"].includes(effectId)) {
+        assert.match(
+          html,
+          effectId === "stylized-materialization"
+            ? /Use your own model/i
+            : /Materialize your own model/i,
+        );
         assert.match(html, /type=["']file["'][^>]+accept=["']\.glb,model\/gltf-binary["']/i);
         assert.match(html, /never uploaded, stored/i);
         assert.match(html, /vertex colors/i);
-        assert.match(html, /adaptive point sizing/i);
+        assert.match(
+          html,
+          effectId === "stylized-materialization"
+            ? /deterministic surface frames/i
+            : /adaptive point sizing/i,
+        );
         assert.doesNotMatch(html, /Audio response, without a microphone/i);
       } else {
         assert.doesNotMatch(html, /type=["']file["']/i);

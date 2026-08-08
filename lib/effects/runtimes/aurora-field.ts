@@ -8,6 +8,7 @@ import {
   length,
   max,
   mix,
+  sRGBTransferEOTF,
   sin,
   smoothstep,
   uniform,
@@ -111,7 +112,10 @@ function auroraFragment(nodes: AuroraNodes): THREE.Node<"vec4"> {
   const gameplayTopFade = smoothstep(0.76, 0.84, texCoord.y);
   color = color.mul(mix(1, gameplayTopFade, nodes.gameplayMix));
 
-  return vec4(color, 1);
+  // The archived GLSL material wrote these numeric colors directly to the
+  // sRGB canvas. Node materials render in the working color space before the
+  // renderer's output transform, so decode once here to preserve that look.
+  return vec4(sRGBTransferEOTF(color) as THREE.Node<"vec3">, 1);
 }
 
 class AuroraFieldRuntime implements EffectInstance {

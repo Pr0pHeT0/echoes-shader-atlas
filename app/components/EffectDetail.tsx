@@ -13,7 +13,10 @@ import {
   type ShaderStageRenderer,
 } from "./ShaderStage";
 import { SourceBrowser } from "./SourceBrowser";
-import type { MaterializationPointCloud } from "@/lib/effects/types";
+import type {
+  MaterializationPointCloud,
+  StylizedPointTarget,
+} from "@/lib/effects/types";
 
 const defaultAudio: ShaderStageAudio = {
   level: 0.5,
@@ -48,6 +51,7 @@ const modelImportResultCodes = new Set([
 ]);
 
 export function EffectDetail({ effect }: { effect: ShaderEffectMeta }) {
+  const isStylizedPointField = effect.id === "stylized-materialization";
   const [preset, setPreset] = useState(effect.presets[0]?.id ?? "default");
   const [paused, setPaused] = useState(false);
   const [quality, setQuality] = useState<ShaderStageQuality>("auto");
@@ -56,12 +60,18 @@ export function EffectDetail({ effect }: { effect: ShaderEffectMeta }) {
   const [automaticAudio, setAutomaticAudio] = useState(true);
   const [audio, setAudio] = useState<ShaderStageAudio>(defaultAudio);
   const [pointCloud, setPointCloud] = useState<MaterializationPointCloud | null>(null);
+  const [pointTarget, setPointTarget] = useState<StylizedPointTarget>("base");
   const [modelFileName, setModelFileName] = useState<string | null>(null);
-  const [modelImport, setModelImport] = useState<ModelImportState>(defaultModelImportState);
+  const [modelImport, setModelImport] = useState<ModelImportState>(() => (
+    isStylizedPointField
+      ? { phase: "idle", message: "Base torus is active." }
+      : defaultModelImportState
+  ));
   const modelImportGeneration = useRef(0);
   const modelInputRef = useRef<HTMLInputElement>(null);
   const hasAudio = effect.drivers.some((driver) => driver.startsWith("Synthetic"));
-  const acceptsLocalModel = effect.id === "audio-reactive-materialization";
+  const acceptsLocalModel = effect.id === "audio-reactive-materialization"
+    || effect.id === "stylized-materialization";
   const usesAshimaNoise = effect.sourceUnits.some((source) => source.id === "simplex-noise-4d");
   const sources = useMemo(
     () => effectShaderSources[effect.id].map((source) => ({
@@ -170,12 +180,20 @@ export function EffectDetail({ effect }: { effect: ShaderEffectMeta }) {
       if (modelImportGeneration.current !== generation) return;
       setPointCloud(prepared);
       setModelFileName(file.name);
+      if (isStylizedPointField) {
+        setPointTarget("uploaded");
+        if (pointTarget !== "uploaded") {
+          trackEvent("target_change", { effect_id: effect.id, target_id: "uploaded" });
+        }
+      }
       setModelImport({
         phase: "ready",
-        message: `${file.name} is ready with model colors and adaptive point sizing.`,
+        message: isStylizedPointField
+          ? `${file.name} is ready and selected. Switch between Base, Terrain, and Uploaded without loading it again.`
+          : `${file.name} is ready with model colors and adaptive point sizing.`,
       });
-      setPreset("materialize");
-      setPaused(false);
+      if (effect.id === "audio-reactive-materialization") setPreset("materialize");
+      if (!isStylizedPointField) setPaused(false);
       setRestartKey((value) => value + 1);
       trackEvent("local_model_import", {
         effect_id: effect.id,
@@ -200,18 +218,51 @@ export function EffectDetail({ effect }: { effect: ShaderEffectMeta }) {
     }
   }
 
+  function selectPointTarget(target: StylizedPointTarget) {
+    if (!isStylizedPointField) return;
+    if (target === "uploaded" && !pointCloud) {
+      modelInputRef.current?.click();
+      return;
+    }
+    if (target === pointTarget) return;
+
+    setPointTarget(target);
+    setRestartKey((value) => value + 1);
+    const retainedUpload = pointCloud ? " The loaded GLB remains available." : "";
+    setModelImport({
+      phase: pointCloud ? "ready" : "idle",
+      message: target === "base"
+        ? `Base torus is active.${retainedUpload}`
+        : target === "terrain"
+          ? `Seeded terrain is active.${retainedUpload}`
+          : `${modelFileName ?? "The local GLB"} is active.`,
+    });
+    trackEvent("target_change", { effect_id: effect.id, target_id: target });
+  }
+
   function restoreProceduralModel() {
     modelImportGeneration.current += 1;
     setPointCloud(null);
     setModelFileName(null);
-    setModelImport({ phase: "idle", message: "Procedural torus knot restored." });
-    setPreset("materialize");
-    setPaused(false);
+    if (isStylizedPointField && pointTarget === "uploaded") {
+      setPointTarget("base");
+      trackEvent("target_change", { effect_id: effect.id, target_id: "base" });
+    }
+    setModelImport({
+      phase: "idle",
+      message: isStylizedPointField
+        ? pointTarget === "uploaded"
+          ? "Uploaded model removed. Base torus is active."
+          : "Uploaded model removed. The selected built-in target remains active."
+        : "Procedural torus knot restored.",
+    });
+    if (effect.id === "audio-reactive-materialization") setPreset("materialize");
+    if (!isStylizedPointField) setPaused(false);
     setRestartKey((value) => value + 1);
     if (modelInputRef.current) modelInputRef.current.value = "";
     trackEvent("local_model_import", {
       effect_id: effect.id,
-      result: "restore_default",
+      result: isStylizedPointField ? "remove" : "restore_default",
     });
   }
 
@@ -220,7 +271,7 @@ export function EffectDetail({ effect }: { effect: ShaderEffectMeta }) {
       <section className="detail-hero" aria-labelledby="effect-title">
         <Breadcrumbs current={effect.name} floating />
         <ShaderStage
-          key={`${effect.id}-${rendererMode}-${quality}-${restartKey}`}
+          key={`${effect.id}-${rendererMode}-${quality}-${isStylizedPointField ? pointTarget : "default"}-${restartKey}`}
           effectId={effect.id}
           preset={preset}
           paused={paused}
@@ -229,6 +280,7 @@ export function EffectDetail({ effect }: { effect: ShaderEffectMeta }) {
           syntheticAudio={hasAudio && automaticAudio}
           audio={hasAudio ? audio : silentAudio}
           pointCloud={pointCloud}
+          pointTarget={isStylizedPointField ? pointTarget : undefined}
           label={`${effect.name} interactive shader study`}
         />
         <div className="hero-grid" aria-hidden="true" />
@@ -276,6 +328,39 @@ export function EffectDetail({ effect }: { effect: ShaderEffectMeta }) {
               </button>
             ))}
           </div>
+          {isStylizedPointField ? (
+            <div className="control-group" role="group" aria-label="Target">
+              <span className="control-group__label">Target</span>
+              {(["base", "terrain", "uploaded"] as const).map((target) => {
+                const label = target === "base"
+                  ? "Base"
+                  : target === "terrain"
+                    ? "Terrain"
+                    : pointCloud
+                      ? "Uploaded"
+                      : "Upload…";
+                return (
+                  <button
+                    key={target}
+                    className={`control-button${pointTarget === target ? " is-active" : ""}`}
+                    type="button"
+                    aria-pressed={pointTarget === target}
+                    disabled={modelImport.phase === "reading"}
+                    title={target === "base"
+                      ? "Use the built-in torus surface."
+                      : target === "terrain"
+                        ? "Use the seeded procedural terrain cloud."
+                        : pointCloud
+                          ? "Use the loaded local GLB."
+                          : "Choose a local GLB without uploading it."}
+                    onClick={() => selectPointTarget(target)}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
           <div className="control-group" role="group" aria-label="Playback">
             <span className="control-group__label">Playback</span>
             <button className="control-button" type="button" onClick={togglePlayback}>
@@ -313,15 +398,18 @@ export function EffectDetail({ effect }: { effect: ShaderEffectMeta }) {
               <ClassificationRow label="Drivers" value={effect.drivers.join(" · ")} />
               <ClassificationRow label="Primitive" value={effect.primitives.join(" · ")} />
               <ClassificationRow label="Pipeline" value={effect.techniques.join(" · ")} />
-              <ClassificationRow label="Source" value={`${effect.sourceUnits.length} mapped units`} />
+              <ClassificationRow
+                label="Source"
+                value={`${effect.sourceUnits.length} mapped ${effect.sourceUnits.length === 1 ? "unit" : "units"}`}
+              />
             </dl>
           </div>
           <div className="detail-prose">
             <p>{effect.description}</p>
             <p>
-              The visual behavior and production defaults are retained in the TSL adaptation. Only
-              application-specific orchestration and unlicensed model inputs were replaced, leaving
-              a focused study that can be read independently of the original product.
+              {isStylizedPointField
+                ? "This authored TSL study applies three visual languages directly to stable point targets: a base knot, seeded terrain, or a browser-local model."
+                : "The visual behavior and production defaults are retained in the TSL adaptation. Only application-specific orchestration and unlicensed model inputs were replaced, leaving a focused study that can be read independently of the original product."}
             </p>
             <p>
               This preview uses one managed WebGPU renderer with automatic WebGL2 fallback, a capped
@@ -378,11 +466,13 @@ export function EffectDetail({ effect }: { effect: ShaderEffectMeta }) {
           <section className="detail-section model-import" aria-labelledby="model-import-title">
             <div className="model-import__copy">
               <span className="section-kicker">Local geometry</span>
-              <h2 id="model-import-title">Materialize your own model.</h2>
+              <h2 id="model-import-title">
+                {isStylizedPointField ? "Use your own model." : "Materialize your own model."}
+              </h2>
               <p className="hero-summary" id="model-import-help">
-                Choose one self-contained GLB 2.0 file. Echoes samples its triangle surfaces into
-                up to 64K points, preserves RGB vertex and base-material colors, and makes points
-                finer as model complexity increases.
+                {isStylizedPointField
+                  ? "Switch the live target between the base torus, seeded terrain, and one self-contained GLB 2.0 file. Local triangle surfaces become up to 64K framed points; Cyberpunk keeps a subtle model tint while Matrix and Ink apply authored palettes."
+                  : "Choose one self-contained GLB 2.0 file. Echoes samples its triangle surfaces into up to 64K points, preserves RGB vertex and base-material colors, and uses adaptive point sizing as model complexity increases."}
               </p>
               <p className="model-import__privacy">
                 The file is processed in memory in this browser tab. It is never uploaded, stored,
@@ -395,18 +485,30 @@ export function EffectDetail({ effect }: { effect: ShaderEffectMeta }) {
             >
               <div className="model-import__target">
                 <span>Current target</span>
-                <strong title={modelFileName ?? undefined}>
-                  {modelFileName ?? "Procedural torus knot"}
+                <strong title={
+                  !isStylizedPointField || pointTarget === "uploaded"
+                    ? modelFileName ?? undefined
+                    : undefined
+                }>
+                  {isStylizedPointField
+                    ? pointTarget === "uploaded"
+                      ? modelFileName ?? "Uploaded model"
+                      : pointTarget === "terrain"
+                        ? "Seeded terrain"
+                        : "Base torus knot"
+                    : modelFileName ?? "Procedural torus knot"}
                 </strong>
                 <small>
-                  {pointCloud
+                  {pointCloud && (!isStylizedPointField || pointTarget === "uploaded")
                     ? `${pointCloud.meshCount} ${pointCloud.meshCount === 1 ? "mesh" : "meshes"} · ${pointCloud.triangleCount.toLocaleString()} valid triangles · adaptive size · local only`
-                    : "Built-in deterministic geometry"}
+                    : isStylizedPointField && pointTarget === "terrain"
+                      ? "Built-in seeded terrain · deterministic surface frames"
+                      : "Built-in deterministic geometry"}
                 </small>
               </div>
               <p className="model-import__requirements" id="model-import-requirements">
                 GLB 2.0 · 20 MB maximum · static triangle meshes. RGB vertex colors multiply each
-                mesh&apos;s base-material color. Texture maps, animation, cameras, and lights are ignored.
+                mesh&apos;s base-material color{isStylizedPointField ? " before the selected style applies its palette" : ""}. Texture maps, animation, cameras, and lights are ignored.
                 Draco, Meshopt, and instancing are not supported.
               </p>
               <div className="model-import__actions">
@@ -419,8 +521,18 @@ export function EffectDetail({ effect }: { effect: ShaderEffectMeta }) {
                     disabled={modelImport.phase === "reading"}
                     onChange={importLocalModel}
                   />
-                  <span>{pointCloud ? "Replace local GLB" : "Choose local GLB"}</span>
+                  <span>{pointCloud ? "Replace uploaded GLB" : "Choose local GLB"}</span>
                 </label>
+                {isStylizedPointField && pointCloud && pointTarget !== "uploaded" ? (
+                  <button
+                    className="ghost-button"
+                    type="button"
+                    disabled={modelImport.phase === "reading"}
+                    onClick={() => selectPointTarget("uploaded")}
+                  >
+                    Use uploaded model
+                  </button>
+                ) : null}
                 {pointCloud ? (
                   <button
                     className="ghost-button"
@@ -428,10 +540,10 @@ export function EffectDetail({ effect }: { effect: ShaderEffectMeta }) {
                     disabled={modelImport.phase === "reading"}
                     onClick={restoreProceduralModel}
                   >
-                    Restore torus knot
+                    {isStylizedPointField ? "Remove uploaded model" : "Restore torus knot"}
                   </button>
                 ) : null}
-                {pointCloud ? (
+                {pointCloud && (!isStylizedPointField || pointTarget === "uploaded") ? (
                   <a className="model-import__stage-link" href="#effect-title">
                     View in live stage ↑
                   </a>

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { EFFECT_IDS } from "../scripts/audit-extraction.mjs";
+import { EFFECT_IDS } from "../lib/effects/types.ts";
 
 const SITE_ORIGIN = "https://shader.echoes.art";
 const publicPaths = [
@@ -119,7 +119,7 @@ test("robots.txt permits indexing and points crawlers at the production sitemap"
   assert.match(body, new RegExp(`^Sitemap:\\s*${SITE_ORIGIN.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/sitemap\\.xml$`, "im"));
 });
 
-test("sitemap.xml enumerates home, policy, provenance, and all five effect permalinks", async () => {
+test("sitemap.xml enumerates home, policy, provenance, and all effect permalinks", async () => {
   const response = await fetchRoute("/sitemap.xml", "application/xml");
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /(?:application|text)\/xml/i);

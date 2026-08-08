@@ -10,15 +10,17 @@ import {
   max,
   mix,
   mod,
-  mx_noise_float,
+  modelViewMatrix,
   normalize,
   pow,
+  sRGBTransferEOTF,
   sin,
   smoothstep,
   sqrt,
   step,
   uniform,
   uv,
+  varying,
   vec3,
   vec4,
 } from "three/tsl";
@@ -26,26 +28,10 @@ import {
 import { createProceduralTerrain, seededValue } from "../geometry";
 import { EFFECT_PRESETS, ORB_TO_SCENE_DEFAULTS } from "../runtime-config";
 import { clampDpr, makeShowcaseScene, resolveParticleCount } from "../runtime-utils";
+import { simplexNoise4d } from "../tsl/simplex-noise-4d";
 import type { EffectFrame, EffectInstance, EffectRuntimeContext } from "../types";
 
 const PRESETS = EFFECT_PRESETS["orb-to-scene-reveal"];
-
-type FloatNode = THREE.Node<"float">;
-type Vec3Node = THREE.Node<"vec3">;
-
-/**
- * MaterialX provides portable 3D gradient noise. Offsetting all three axes at
- * different rates gives the old 4D simplex field the same smooth time axis
- * without embedding backend-specific GLSL/WGSL.
- */
-function temporalNoise(point: Vec3Node, time: FloatNode, phase = 0): FloatNode {
-  const animatedPoint = point.add(vec3(
-    time.mul(0.83),
-    time.mul(0.47),
-    time.mul(0.29),
-  )).add(vec3(phase * 19.19, phase * 7.73, phase * 3.17));
-  return mx_noise_float(animatedPoint);
-}
 
 function makeInstancedSprite(material: THREE.PointsNodeMaterial, count: number): THREE.Sprite {
   // Sprite's public type has not yet caught up with its runtime NodeMaterial support.
@@ -157,15 +143,15 @@ class OrbToSceneRuntime implements EffectInstance {
         particle.w.assign(mod(particle.w, 1));
         particle.xyz.assign(base.xyz);
       }).Else(() => {
-        const noiseStrength = temporalNoise(base.xyz.mul(0.7), time.add(1));
+        const noiseStrength = simplexNoise4d(vec4(base.xyz.mul(0.7), time.add(1)));
         const influence = this.flowFieldInfluence.sub(0.5).mul(-2);
         const strength = smoothstep(influence, 1, noiseStrength);
         const flowPoint = particle.xyz.mul(this.flowFieldFrequency);
         const flowField = normalize(vec3(
-          temporalNoise(flowPoint, time, 0),
-          temporalNoise(flowPoint, time, 1),
-          temporalNoise(flowPoint, time, 2),
-        ).add(vec3(1e-5)));
+          simplexNoise4d(vec4(flowPoint, time)),
+          simplexNoise4d(vec4(flowPoint.add(1), time)),
+          simplexNoise4d(vec4(flowPoint.add(2), time)),
+        ));
         particle.xyz.addAssign(
           flowField.mul(this.deltaTime).mul(strength).mul(this.flowFieldStrength),
         );
@@ -194,6 +180,9 @@ class OrbToSceneRuntime implements EffectInstance {
     );
     const revealEase = this.reveal.mul(this.reveal).mul(this.reveal.mul(-2).add(3));
     const revealedPosition = mix(orbPosition, particle.xyz, revealEase);
+    const fogDepth = varying(modelViewMatrix.mul(vec4(revealedPosition, 1)).z.negate());
+    const fogColorValue = new THREE.Color(0x03060d);
+    const fogColor = vec3(fogColorValue.r, fogColorValue.g, fogColorValue.b);
 
     const sizeIn = smoothstep(0, 0.6, particle.w);
     const sizeOut = smoothstep(0.6, 1, particle.w).oneMinus();
@@ -232,7 +221,7 @@ class OrbToSceneRuntime implements EffectInstance {
       depthWrite: true,
       depthTest: true,
       side: THREE.DoubleSide,
-      fog: true,
+      fog: false,
     });
     this.material.positionNode = revealedPosition;
     this.material.sizeNode = mix(orbPixelSize, scenePointSize, revealEase).mul(this.pointSizeScale);
@@ -255,9 +244,14 @@ class OrbToSceneRuntime implements EffectInstance {
       const sceneSpecular = pow(max(dot(normal, sceneHalfDirection), 0), 32);
       const sceneLitColor = displayColor.mul(sceneDiffuse.mul(0.5).add(0.5)).add(vec3(0.05).mul(sceneSpecular));
       const litColor = mix(orbLitColor, sceneLitColor, revealEase);
+      const fogFactor = smoothstep(7.5, 15.5, fogDepth);
+      const foggedColor = mix(litColor, fogColor, fogFactor);
       const orbAlphaProfile = smoothstep(0.05, 1, radiusSquared).oneMinus().mul(0.68).add(0.32);
       const alphaProfile = mix(orbAlphaProfile, 1, revealEase);
-      return vec4(litColor, opacity.mul(alphaProfile));
+      return vec4(
+        sRGBTransferEOTF(foggedColor) as THREE.Node<"vec3">,
+        opacity.mul(alphaProfile),
+      );
     })();
 
     this.points = makeInstancedSprite(this.material, count);

@@ -5,6 +5,7 @@ import {
   fract,
   length,
   mix,
+  sRGBTransferEOTF,
   sin,
   smoothstep,
   uniform,
@@ -129,7 +130,9 @@ function voiceFragment(nodes: VoiceNodes): THREE.Node<"vec4"> {
     0,
     0.95,
   );
-  return vec4(color, alpha);
+  // Match the archived GLSL material's raw sRGB-coded fragment output. Alpha
+  // stays untouched so the original additive SrcAlpha/One blend is retained.
+  return vec4(sRGBTransferEOTF(color) as THREE.Node<"vec3">, alpha);
 }
 
 class VoiceWaveRuntime implements EffectInstance {

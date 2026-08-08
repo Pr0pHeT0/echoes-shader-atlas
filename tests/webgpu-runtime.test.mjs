@@ -8,6 +8,7 @@ const runtimePaths = [
   "morphing-echoes-title.ts",
   "orb-to-scene-reveal.ts",
   "audio-reactive-materialization.ts",
+  "stylized-materialization.ts",
 ];
 
 async function source(path) {
@@ -25,6 +26,37 @@ test("all live effects use portable TSL node materials rather than WebGL-only sh
   }
 });
 
+test("archived TSL effects preserve GLSL color transfer and simplex flow", async () => {
+  for (const filename of runtimePaths.filter((name) => name !== "stylized-materialization.ts")) {
+    const runtime = await source(`lib/effects/runtimes/${filename}`);
+    assert.match(
+      runtime,
+      /sRGBTransferEOTF/,
+      `${filename} should cancel the renderer output transform used by node materials`,
+    );
+  }
+
+  for (const filename of [
+    "morphing-echoes-title.ts",
+    "orb-to-scene-reveal.ts",
+    "audio-reactive-materialization.ts",
+  ]) {
+    const runtime = await source(`lib/effects/runtimes/${filename}`);
+    assert.match(runtime, /simplexNoise4d/, `${filename} should retain the archived 4D simplex flow`);
+    assert.doesNotMatch(runtime, /mx_noise_float/, `${filename} must not substitute MaterialX 3D noise`);
+  }
+
+  const stylized = await source("lib/effects/runtimes/stylized-materialization.ts");
+  assert.doesNotMatch(stylized, /simplexNoise4d/);
+  assert.doesNotMatch(stylized, /\.compute\(/);
+  assert.doesNotMatch(stylized, /StorageBufferNode|instancedArray/);
+
+  const simplex = await source("lib/effects/tsl/simplex-noise-4d.ts");
+  assert.match(simplex, /0\.1381966011250105/);
+  assert.match(simplex, /0\.30901699437494745/);
+  assert.match(simplex, /\.mul\(49\)/);
+});
+
 test("the shared stage prefers WebGPU, retains WebGL2 fallback testing, and initializes asynchronously", async () => {
   const stage = await source("app/components/ShaderStage.tsx");
   const detail = await source("app/components/EffectDetail.tsx");
@@ -35,7 +67,10 @@ test("the shared stage prefers WebGPU, retains WebGL2 fallback testing, and init
   assert.match(stage, /new THREE\.WebGPURenderer/);
   assert.match(stage, /forceWebGL/);
   assert.match(stage, /rendererMode === ["']webgl2["']/);
-  assert.match(detail, /key=\{`\$\{effect\.id\}-\$\{rendererMode\}-\$\{quality\}-\$\{restartKey\}`\}/);
+  assert.match(
+    detail,
+    /key=\{`\$\{effect\.id\}-\$\{rendererMode\}-\$\{quality\}-\$\{isStylizedPointField \? pointTarget : "default"\}-\$\{restartKey\}`\}/,
+  );
   assert.match(detail, /rendererMode=\{rendererMode\}/);
   assert.match(detail, /aria-label=["']Renderer["']/);
   assert.match(detail, /aria-pressed=\{rendererMode === value\}/);

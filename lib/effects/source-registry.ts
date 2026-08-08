@@ -59,4 +59,7 @@ export const effectShaderSources: Record<EffectId, EffectShaderSource[]> = {
     source("Materialization", "fragment", "lib/shaders/materialization/materialization.frag.glsl", materializationFragment),
     sharedSimplex,
   ],
+  "stylized-materialization": [
+    source("Point-sprite basis", "fragment", "lib/shaders/materialization/materialization.frag.glsl", materializationFragment),
+  ],
 };

@@ -145,6 +145,7 @@ function makeHarness({
   rendererFactory = () => makeRenderer(),
   reducedMotion = false,
   pointCloud = null,
+  pointTarget,
 } = {}) {
   const environment = new FakeEnvironment();
   environment.reducedMotion = reducedMotion;
@@ -163,6 +164,7 @@ function makeHarness({
     environment,
     preset: "quiet-drift",
     pointCloud,
+    pointTarget,
     createRenderer: () => {
       if (rendererError) throw rendererError;
       const nextRenderer = renderers.length === 0 ? renderer : rendererFactory(renderers.length);
@@ -183,15 +185,18 @@ function makeHarness({
 test("browser-local point targets reach the runtime and survive WebGPU renderer restoration", async () => {
   const pointCloud = {
     positions: new Float32Array([0, 0, 0]),
+    normals: new Float32Array([0, 1, 0]),
+    tangents: new Float32Array([1, 0, 0]),
     colors: new Float32Array([0, 1, 1]),
     sections: new Float32Array([0]),
     count: 1,
     meshCount: 1,
     triangleCount: 1,
   };
-  const harness = makeHarness({ pointCloud });
+  const harness = makeHarness({ pointCloud, pointTarget: "uploaded" });
   await harness.controller.mount();
   assert.equal(harness.contexts[0].pointCloud, pointCloud);
+  assert.equal(harness.contexts[0].pointTarget, "uploaded");
 
   harness.renderer.onDeviceLost({
     api: "WebGPU",
@@ -201,6 +206,7 @@ test("browser-local point targets reach the runtime and survive WebGPU renderer 
   });
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(harness.contexts[1].pointCloud, pointCloud);
+  assert.equal(harness.contexts[1].pointTarget, "uploaded");
   harness.controller.dispose();
 });
 
@@ -249,6 +255,36 @@ test("controller mounts, switches effects, and releases every owned resource on 
   harness.controller.dispose();
   assert.equal(second.disposals, 1, "dispose is idempotent");
   assert.equal(harness.renderer.disposals, 1);
+});
+
+test("prepareRender runs exactly between update and render for static and animated frames", async () => {
+  const harness = makeHarness();
+  await harness.controller.mount();
+  const runtime = harness.runtimes[0];
+  const calls = [];
+  const originalUpdate = runtime.update.bind(runtime);
+  const originalRender = harness.renderer.render.bind(harness.renderer);
+
+  runtime.update = (frame) => {
+    calls.push("update");
+    originalUpdate(frame);
+  };
+  runtime.prepareRender = () => { calls.push("prepareRender"); };
+  harness.renderer.render = (...values) => {
+    calls.push("render");
+    originalRender(...values);
+  };
+
+  harness.controller.setPaused(true);
+  assert.deepEqual(calls, ["update", "prepareRender", "render"]);
+
+  calls.length = 0;
+  harness.controller.setPaused(false);
+  calls.length = 0;
+  harness.environment.runNextFrame(16);
+  assert.deepEqual(calls, ["update", "prepareRender", "render"]);
+
+  harness.controller.dispose();
 });
 
 test("effect switches requested during renderer initialization are applied after initialization", async () => {
@@ -525,6 +561,13 @@ test("paused, hidden, and reduced-motion frames never accumulate disabled wall t
   harness.environment.runNextFrame(16);
   assert.equal(runtime.updates.at(-1).elapsed, 0.016);
   harness.controller.setPaused(true);
+  const pausedRendersBeforeResize = harness.renderer.renders;
+  harness.environment.windowTarget.dispatch("resize");
+  assert.equal(
+    harness.renderer.renders,
+    pausedRendersBeforeResize + 1,
+    "a paused stage redraws after its render targets are resized",
+  );
   harness.environment.runNextFrame(5_000);
   harness.controller.setPaused(false);
   harness.environment.runNextFrame(16);
@@ -546,6 +589,13 @@ test("paused, hidden, and reduced-motion frames never accumulate disabled wall t
   assert.equal(reduced.runtimes[0].updates.at(-1).delta, 0);
   assert.equal(reduced.runtimes[0].updates.at(-1).elapsed, 0);
   assert.equal(reduced.runtimes[0].updates.at(-1).static, true);
+  const reducedRendersBeforeResize = reduced.renderer.renders;
+  reduced.environment.windowTarget.dispatch("resize");
+  assert.equal(
+    reduced.renderer.renders,
+    reducedRendersBeforeResize + 1,
+    "a reduced-motion stage redraws after its render targets are resized",
+  );
   assert.deepEqual(
     reduced.runtimes[0].updates.at(-1).audio,
     frozenAudio,
@@ -623,7 +673,7 @@ test("font loading failure is absorbed so canvas typography can use its CSS fall
   assert.equal(fontSetLoads, 0);
 });
 
-test("preset and uniform registries exactly cover the five catalog runtimes", () => {
+test("preset and uniform registries exactly cover every catalog runtime", () => {
   const ids = shaderEffects.map((effect) => effect.id);
   assert.deepEqual(Object.keys(EFFECT_PRESETS), ids);
   assert.deepEqual(Object.keys(EFFECT_UNIFORM_DEFAULTS), ids);

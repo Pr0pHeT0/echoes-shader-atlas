@@ -13,6 +13,7 @@ export const effectFamilies = [
   "Particle Typography",
   "Point-cloud Transition",
   "GPGPU Materialization",
+  "Point-Cloud Styling",
 ] as const satisfies readonly EffectFamily[];
 
 export const effectStatuses = ["active", "archived"] as const satisfies readonly EffectStatus[];
@@ -504,6 +505,89 @@ export const shaderEffects: readonly ShaderEffectMeta[] = [
       { label: "Original units", value: "3 + shared noise" },
       { label: "Reveal sections", value: "4" },
       { label: "Status", value: "Archived study" },
+    ],
+  },
+  {
+    id: "stylized-materialization",
+    slug: "stylized-materialization",
+    index: 6,
+    name: "Stylized Point Field",
+    shortName: "Point Field",
+    family: "Point-Cloud Styling",
+    status: "active",
+    statusLabel: "Active · authored study",
+    eyebrow: "06 / Stylized point field",
+    summary:
+      "One stable point target becomes tangent neon ribbons, binary phosphor glyphs, or watercolor pooled through a shared pigment mask.",
+    description:
+      "Cyberpunk ribbons, binary-led SDF glyphs, and an ink-wash compositor render directly over a base torus, seeded terrain, or browser-local GLB. Target geometry stays stable while each style supplies its own color, motion, and compositing language.",
+    seo: {
+      title: "Three.js Stylized Point-Field Shader",
+      description:
+        "Explore a Three.js point-field shader with tangent neon ribbons, binary SDF glyphs, and pooled ink across a base torus, seeded terrain, or local GLB.",
+      primaryKeyword: "Three.js stylized point-field shader",
+      headingQualifier: "Tangent neon ribbons, binary SDF glyphs, and pooled Chinese ink",
+      anatomyHeading: "How three visual languages render one stable point target.",
+      sourceHeading: "GLSL basis: point targets and sprite shaping.",
+      adaptation:
+        "This authored TSL study keeps the recovered point-sprite conventions while replacing the original flow lifecycle with stable target geometry. The live runtime styles a base torus, seeded terrain, or browser-local GLB through tangent ribbons, binary SDF glyphs, and a shared ink mask.",
+      workflow: [
+        {
+          title: "Choose one stable point target",
+          description: "Switch between the built-in torus, a seeded terrain cloud, and a browser-local GLB without changing the selected rendering style.",
+        },
+        {
+          title: "Build deterministic surface frames",
+          description: "Normalized normals and orthogonal tangents keep ribbons, glyphs, and pigment attached to both procedural and uploaded geometry.",
+        },
+        {
+          title: "Trace target-tangent ribbons",
+          description: "Cyberpunk stretches selected samples along stable target tangents, pairing compact light cores with longer seeded-color ribbons instead of randomly rotated billboard dashes.",
+        },
+        {
+          title: "Set binary-led SDF glyphs",
+          description: "Matrix maps stable point IDs into a 4×4 single-channel Chakra Petch atlas led by zero and one, reserving glyph changes and bright heads for sparse code streams.",
+        },
+        {
+          title: "Pool pigment through one shared mask",
+          description: "Ink deposits sparse splats into a common field, then blurs and composites that field with pooled rims, coherent paper grain, and deliberate untouched space.",
+        },
+      ],
+      relatedEffectIds: ["audio-reactive-materialization", "morphing-echoes-title"],
+    },
+    drivers: ["Time", "Style preset", "Target geometry", "Local geometry"],
+    techniques: [
+      "Deterministic target sampling",
+      "Stable normal-tangent frames",
+      "Target-tangent neon ribbons",
+      "Single-channel binary SDF atlas",
+      "Shared blurred pigment mask",
+    ],
+    primitives: ["Tangent ribbon instances", "Binary SDF glyph sprites", "Pigment-mask composite"],
+    runtime: "stylized-materialization",
+    sourceUnits: sources("materialization-fragment"),
+    presets: [
+      {
+        id: "cyberpunk-lines",
+        label: "Cyberpunk",
+        description: "Renders the target as edge-biased cyan, magenta, violet, and acid neon ribbons.",
+      },
+      {
+        id: "matrix-ascii",
+        label: "Matrix",
+        description: "Maps points to stable binary-led SDF glyphs with sparse phosphor stream heads.",
+      },
+      {
+        id: "ink-wash",
+        label: "Ink wash",
+        description: "Pools sumi and diluted blue-gray pigment through one blurred splat mask over xuan paper.",
+      },
+    ],
+    accent: { primary: "#22e7ff", secondary: "#ff2bd6", wash: "rgba(34, 231, 255, 0.17)" },
+    stats: [
+      { label: "Targets", value: "Base / Terrain / GLB" },
+      { label: "Ribbon budget", value: "4K / 8K" },
+      { label: "Glyph atlas", value: "4 × 4 SDF" },
     ],
   },
 ];

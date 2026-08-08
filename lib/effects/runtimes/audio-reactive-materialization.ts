@@ -8,14 +8,16 @@ import {
   length,
   max,
   mix,
-  mx_noise_float,
+  modelViewMatrix,
   normalize,
   pow,
+  sRGBTransferEOTF,
   sin,
   smoothstep,
   sqrt,
   uniform,
   uv,
+  varying,
   vec3,
   vec4,
 } from "three/tsl";
@@ -28,6 +30,7 @@ import {
   resolveMaterializationPointSize,
   resolveParticleCount,
 } from "../runtime-utils";
+import { simplexNoise4d } from "../tsl/simplex-noise-4d";
 import type {
   EffectFrame,
   EffectInstance,
@@ -39,15 +42,6 @@ const SECTION_COUNT = 4;
 
 type FloatNode = THREE.Node<"float">;
 type Vec3Node = THREE.Node<"vec3">;
-
-function temporalNoise(point: Vec3Node, time: FloatNode, phase = 0): FloatNode {
-  const animatedPoint = point.add(vec3(
-    time.mul(0.83),
-    time.mul(0.47),
-    time.mul(0.29),
-  )).add(vec3(phase * 19.19, phase * 7.73, phase * 3.17));
-  return mx_noise_float(animatedPoint);
-}
 
 function makeInstancedSprite(material: THREE.PointsNodeMaterial, count: number): THREE.Sprite {
   // Sprite's public type has not yet caught up with its runtime NodeMaterial support.
@@ -74,7 +68,13 @@ function disposeComputeOnlyStorage(
   attributes?.delete(storage.value);
 }
 
-function sphereFragment(displayColor: Vec3Node, opacity: FloatNode | number = 1): THREE.Node<"vec4"> {
+function sphereFragment(
+  displayColor: Vec3Node,
+  fogDepth: FloatNode,
+  opacity: FloatNode | number = 1,
+): THREE.Node<"vec4"> {
+  const fogColorValue = new THREE.Color(0x03060d);
+  const fogColor = vec3(fogColorValue.r, fogColorValue.g, fogColorValue.b);
   return Fn(() => {
     const coordinate = uv().mul(2).sub(1);
     const radiusSquared = dot(coordinate, coordinate);
@@ -85,7 +85,11 @@ function sphereFragment(displayColor: Vec3Node, opacity: FloatNode | number = 1)
     const halfDirection = normalize(lightDirection.add(vec3(0, 0, 1)));
     const specular = pow(max(dot(normal, halfDirection), 0), 32);
     const litColor = displayColor.mul(diffuse.mul(0.5).add(0.5)).add(vec3(0.05).mul(specular));
-    return vec4(litColor, opacity);
+    const fogFactor = smoothstep(5.5, 12, fogDepth);
+    return vec4(
+      sRGBTransferEOTF(mix(litColor, fogColor, fogFactor)) as THREE.Node<"vec3">,
+      opacity,
+    );
   })();
 }
 
@@ -223,7 +227,7 @@ class MaterializationRuntime implements EffectInstance {
       const time = this.time.mul(0.2).add(
         this.mid.mul(this.midFlowTimeStrength).mul(this.midFlowTimeEnabled).mul(this.shaderEnabled),
       );
-      const noiseStrength = temporalNoise(base.xyz.mul(0.7), time.add(1));
+      const noiseStrength = simplexNoise4d(vec4(base.xyz.mul(0.7), time.add(1)));
       const influence = this.flowFieldInfluence.sub(0.5).mul(-2).sub(
         this.bass
           .mul(this.bassFlowInfluenceStrength)
@@ -239,10 +243,10 @@ class MaterializationRuntime implements EffectInstance {
       );
       const flowPoint = particle.xyz.mul(frequency);
       const flowField = normalize(vec3(
-        temporalNoise(flowPoint, time, 0),
-        temporalNoise(flowPoint, time, 1),
-        temporalNoise(flowPoint, time, 2),
-      ).add(vec3(1e-5)));
+        simplexNoise4d(vec4(flowPoint, time)),
+        simplexNoise4d(vec4(flowPoint.add(1), time)),
+        simplexNoise4d(vec4(flowPoint.add(2), time)),
+      ));
 
       const audioInput = this.audioLevel.add(this.bass.mul(this.audioGateBassMix));
       const audioActivity = mix(
@@ -301,6 +305,7 @@ class MaterializationRuntime implements EffectInstance {
       .mul(this.shaderEnabled)
       .mul(this.bassRadialEnabled);
     const displayPosition = particle.xyz.add(direction.mul(radialStrength));
+    const fogDepth = varying(modelViewMatrix.mul(vec4(displayPosition, 1)).z.negate());
     const sectionVisible = particleSection.greaterThanEqual(this.materializedSectionCount);
     const trebleScale = this.treble
       .mul(this.trebleSizeStrength)
@@ -317,11 +322,11 @@ class MaterializationRuntime implements EffectInstance {
       depthWrite: true,
       depthTest: true,
       side: THREE.DoubleSide,
-      fog: true,
+      fog: false,
     });
     this.material.positionNode = displayPosition;
     this.material.sizeNode = sectionVisible.select(displaySize, 0);
-    this.material.fragmentNode = sphereFragment(particleColor);
+    this.material.fragmentNode = sphereFragment(particleColor, fogDepth);
     this.points = makeInstancedSprite(this.material, count);
     this.group.add(this.points);
 

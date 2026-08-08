@@ -11,6 +11,7 @@ export const lazyEffectFactories: Record<EffectId, () => Promise<EffectFactory>>
   "morphing-echoes-title": async () => (await import("./runtimes/morphing-echoes-title")).create,
   "orb-to-scene-reveal": async () => (await import("./runtimes/orb-to-scene-reveal")).create,
   "audio-reactive-materialization": async () => (await import("./runtimes/audio-reactive-materialization")).create,
+  "stylized-materialization": async () => (await import("./runtimes/stylized-materialization")).create,
 };
 
 export async function createEffectRuntime(

@@ -6,6 +6,7 @@ export const EFFECT_PRESETS = Object.freeze({
   "morphing-echoes-title": Object.freeze(["wordmark", "orb", "icosahedron", "burst"] as const),
   "orb-to-scene-reveal": Object.freeze(["orbit", "reveal", "flow"] as const),
   "audio-reactive-materialization": Object.freeze(["dormant", "materialize", "pulse", "dissolve"] as const),
+  "stylized-materialization": Object.freeze(["cyberpunk-lines", "matrix-ascii", "ink-wash"] as const),
 } as const satisfies Record<EffectId, readonly string[]>);
 
 export const AURORA_UNIFORM_DEFAULTS = Object.freeze({
@@ -71,10 +72,15 @@ export const MATERIALIZATION_DEFAULTS = Object.freeze({
   trebleSizeStrength: 0.05,
 });
 
+export const STYLIZED_MATERIALIZATION_DEFAULTS = Object.freeze({
+  size: 0.058,
+});
+
 export const EFFECT_UNIFORM_DEFAULTS = Object.freeze({
   "aurora-field": AURORA_UNIFORM_DEFAULTS,
   "voice-wave-particles": VOICE_UNIFORM_DEFAULTS,
   "morphing-echoes-title": TITLE_UNIFORM_DEFAULTS,
   "orb-to-scene-reveal": ORB_TO_SCENE_DEFAULTS,
   "audio-reactive-materialization": MATERIALIZATION_DEFAULTS,
+  "stylized-materialization": STYLIZED_MATERIALIZATION_DEFAULTS,
 } as const satisfies Record<EffectId, Readonly<Record<string, number | boolean>>>);

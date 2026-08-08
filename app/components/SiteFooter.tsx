@@ -3,7 +3,6 @@ import {
   SITE_LICENSE_URL,
   SITE_MAINTAINER_NAME,
   SITE_MAINTAINER_URL,
-  SITE_MANIFEST_URL,
   SITE_NOTICES_URL,
   SITE_UPDATED_DATE,
 } from "@/lib/site";
@@ -23,9 +22,8 @@ export function SiteFooter() {
       <div className="footer-links">
         <a href="/about">About the project</a>
         <a href="/privacy">Privacy &amp; analytics</a>
-        <a href="/#catalog">All five systems</a>
+        <a href="/#catalog">All six studies</a>
         <a href={SITE_GITHUB_URL} target="_blank" rel="noreferrer">GitHub source ↗</a>
-        <a href={SITE_MANIFEST_URL} target="_blank" rel="noreferrer">Extraction manifest ↗</a>
         <a href={SITE_NOTICES_URL} target="_blank" rel="noreferrer">Third-party notices ↗</a>
         <a href={SITE_LICENSE_URL} target="_blank" rel="noreferrer">MIT License ↗</a>
         <a href="#top">Back to top ↑</a>

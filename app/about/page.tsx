@@ -77,10 +77,10 @@ export default function AboutPage() {
           <div>
             <p className="lead">
               Echoes Shaders separates five visual systems from their original product context,
-              preserves their shader logic, and presents each one as a documented, inspectable study.
+              preserves their shader logic, and extends that archive with one documented authored point-field study.
             </p>
             <a className="text-link" href="/#catalog">
-              Browse the five systems <span aria-hidden="true">↘</span>
+              Browse the six studies <span aria-hidden="true">↘</span>
             </a>
           </div>
         </section>
@@ -94,7 +94,8 @@ export default function AboutPage() {
               inline shader strings, eight standalone shader files, and one shared 4D simplex include.
             </p>
             <ul className="metadata-list">
-              <li><strong>Effects</strong><span>{shaderEffects.length} classified systems</span></li>
+              <li><strong>Recovered effects</strong><span>5 source systems</span></li>
+              <li><strong>Catalog studies</strong><span>{shaderEffects.length} classified runtimes</span></li>
               <li><strong>Source units</strong><span>{shaderSourceUnits.length} original units</span></li>
               <li><strong>Status</strong><span>{activeCount} active · {archivedCount} archived</span></li>
               <li><strong>Languages</strong><span>TypeScript · TSL · GLSL archive</span></li>
@@ -161,10 +162,11 @@ export default function AboutPage() {
             <p>
               The source PLY terrain and GLB pendant are intentionally not redistributed because their
               reuse terms were not documented. Orb-to-Scene Reveal uses deterministic seeded terrain;
-              Point-Cloud Materialization uses a segmented torus knot.
+              Point-Cloud Materialization uses a segmented torus knot; Stylized Point Field can switch
+              between that base surface and a newly generated terrain cloud.
             </p>
             <p>
-              The materialization study also accepts an optional self-contained GLB as a temporary local
+              The two model-driven point studies also accept an optional self-contained GLB as a temporary local
               point target. RGB vertex colors and base-material colors carry into the particles, while a
               bounded complexity curve makes dense models use finer points. Model data is processed only
               in browser memory, is never uploaded or stored, and disappears when the page is refreshed

@@ -2,8 +2,10 @@ import type {
   BufferAttribute,
   Color,
   InterleavedBufferAttribute,
+  Matrix3,
   Mesh,
   Object3D,
+  Vector3,
 } from "three";
 import type { MaterializationPointCloud } from "./types";
 
@@ -109,8 +111,12 @@ type GeometryAttribute = BufferAttribute | InterleavedBufferAttribute;
 interface SampleSurface {
   mesh: Mesh;
   position: GeometryAttribute;
+  normal: GeometryAttribute | null;
+  tangent: GeometryAttribute | null;
   color: GeometryAttribute | null;
   index: BufferAttribute | null;
+  normalMatrix: Matrix3;
+  tangentMatrix: Matrix3;
   triangleIndices: Uint32Array;
   triangleBaseColors: Float32Array;
   cumulativeAreas: Float64Array;
@@ -376,6 +382,46 @@ function readVertex(
   target.set(attribute.getX(index), attribute.getY(index), attribute.getZ(index));
 }
 
+const FRAME_EPSILON = 1e-20;
+
+function normalizeFiniteVector(vector: Vector3): boolean {
+  const lengthSquared = vector.lengthSq();
+  if (!Number.isFinite(lengthSquared) || lengthSquared <= FRAME_EPSILON) return false;
+  vector.multiplyScalar(1 / Math.sqrt(lengthSquared));
+  return Number.isFinite(vector.x) && Number.isFinite(vector.y) && Number.isFinite(vector.z);
+}
+
+function setFallbackTangent(
+  normal: Vector3,
+  firstEdge: Vector3,
+  secondEdge: Vector3,
+  target: Vector3,
+  scratch: Vector3,
+): void {
+  target.copy(firstEdge).addScaledVector(normal, -firstEdge.dot(normal));
+  scratch.copy(secondEdge).addScaledVector(normal, -secondEdge.dot(normal));
+  const firstLengthSquared = target.lengthSq();
+  const secondLengthSquared = scratch.lengthSq();
+  if (
+    Number.isFinite(secondLengthSquared)
+    && secondLengthSquared > FRAME_EPSILON
+    && (!Number.isFinite(firstLengthSquared) || secondLengthSquared > firstLengthSquared)
+  ) {
+    target.copy(scratch);
+  }
+  if (normalizeFiniteVector(target)) return;
+
+  if (Math.abs(normal.x) <= Math.abs(normal.y) && Math.abs(normal.x) <= Math.abs(normal.z)) {
+    target.set(1, 0, 0);
+  } else if (Math.abs(normal.y) <= Math.abs(normal.z)) {
+    target.set(0, 1, 0);
+  } else {
+    target.set(0, 0, 1);
+  }
+  target.addScaledVector(normal, -target.dot(normal));
+  if (!normalizeFiniteVector(target)) target.set(1, 0, 0);
+}
+
 export async function createMaterializationPointCloudFromGlb(
   arrayBuffer: ArrayBuffer,
   pointCount = MATERIALIZATION_MODEL_POINT_COUNT,
@@ -415,6 +461,8 @@ export async function createMaterializationPointCloudFromGlb(
       if (!mesh.isMesh || !mesh.geometry) return;
       const position = mesh.geometry.getAttribute("position") as GeometryAttribute | undefined;
       if (!position || position.itemSize < 3) return;
+      const normalAttribute = mesh.geometry.getAttribute("normal") as GeometryAttribute | undefined;
+      const tangentAttribute = mesh.geometry.getAttribute("tangent") as GeometryAttribute | undefined;
       const index = mesh.geometry.getIndex();
       const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
       const hasSingleMaterial = materials.length <= 1;
@@ -466,8 +514,12 @@ export async function createMaterializationPointCloudFromGlb(
       surfaces.push({
         mesh,
         position,
+        normal: normalAttribute && normalAttribute.itemSize >= 3 ? normalAttribute : null,
+        tangent: tangentAttribute && tangentAttribute.itemSize >= 3 ? tangentAttribute : null,
         color: (mesh.geometry.getAttribute("color") as GeometryAttribute | undefined) ?? null,
         index,
+        normalMatrix: new THREE.Matrix3().getNormalMatrix(mesh.matrixWorld),
+        tangentMatrix: new THREE.Matrix3().setFromMatrix4(mesh.matrixWorld),
         triangleIndices: new Uint32Array(validTriangles),
         triangleBaseColors: new Float32Array(triangleBaseColors),
         cumulativeAreas: new Float64Array(cumulativeAreas),
@@ -493,11 +545,23 @@ export async function createMaterializationPointCloudFromGlb(
     }
     const scale = TARGET_LONGEST_DIMENSION / longestDimension;
     const positions = new Float32Array(safePointCount * 3);
+    const normals = new Float32Array(safePointCount * 3);
+    const tangents = new Float32Array(safePointCount * 3);
     const colors = new Float32Array(safePointCount * 3);
     const sections = new Float32Array(safePointCount);
     const random = mulberry32(0xe0c0e5);
     const sampledColor = new THREE.Color();
     const vertexColor = new THREE.Color();
+    const normalA = new THREE.Vector3();
+    const normalB = new THREE.Vector3();
+    const normalC = new THREE.Vector3();
+    const tangentA = new THREE.Vector3();
+    const tangentB = new THREE.Vector3();
+    const tangentC = new THREE.Vector3();
+    const sampledNormal = new THREE.Vector3();
+    const sampledTangent = new THREE.Vector3();
+    const faceNormal = new THREE.Vector3();
+    const tangentScratch = new THREE.Vector3();
     const yRange = Math.max(size.y, 1e-9);
 
     for (let point = 0; point < safePointCount; point += 1) {
@@ -525,6 +589,42 @@ export async function createMaterializationPointCloudFromGlb(
       const weightA = 1 - squareRoot;
       const weightB = squareRoot * (1 - random());
       const weightC = 1 - weightA - weightB;
+      edgeA.subVectors(vertexB, vertexA);
+      edgeB.subVectors(vertexC, vertexA);
+      faceNormal.crossVectors(edgeA, edgeB);
+      if (!normalizeFiniteVector(faceNormal)) faceNormal.set(0, 1, 0);
+
+      if (surface.normal) {
+        readVertex(surface.normal, a, normalA);
+        readVertex(surface.normal, b, normalB);
+        readVertex(surface.normal, c, normalC);
+        sampledNormal.set(
+          normalA.x * weightA + normalB.x * weightB + normalC.x * weightC,
+          normalA.y * weightA + normalB.y * weightB + normalC.y * weightC,
+          normalA.z * weightA + normalB.z * weightB + normalC.z * weightC,
+        ).applyMatrix3(surface.normalMatrix);
+        if (!normalizeFiniteVector(sampledNormal)) sampledNormal.copy(faceNormal);
+      } else {
+        sampledNormal.copy(faceNormal);
+      }
+
+      if (surface.tangent) {
+        readVertex(surface.tangent, a, tangentA);
+        readVertex(surface.tangent, b, tangentB);
+        readVertex(surface.tangent, c, tangentC);
+        sampledTangent.set(
+          tangentA.x * weightA + tangentB.x * weightB + tangentC.x * weightC,
+          tangentA.y * weightA + tangentB.y * weightB + tangentC.y * weightC,
+          tangentA.z * weightA + tangentB.z * weightB + tangentC.z * weightC,
+        ).applyMatrix3(surface.tangentMatrix);
+        sampledTangent.addScaledVector(sampledNormal, -sampledTangent.dot(sampledNormal));
+      } else {
+        sampledTangent.set(0, 0, 0);
+      }
+      if (!normalizeFiniteVector(sampledTangent)) {
+        setFallbackTangent(sampledNormal, edgeA, edgeB, sampledTangent, tangentScratch);
+      }
+
       const worldX = vertexA.x * weightA + vertexB.x * weightB + vertexC.x * weightC;
       const worldY = vertexA.y * weightA + vertexB.y * weightB + vertexC.y * weightC;
       const worldZ = vertexA.z * weightA + vertexB.z * weightB + vertexC.z * weightC;
@@ -532,6 +632,12 @@ export async function createMaterializationPointCloudFromGlb(
       positions[offset] = (worldX - center.x) * scale;
       positions[offset + 1] = (worldY - center.y) * scale;
       positions[offset + 2] = (worldZ - center.z) * scale;
+      normals[offset] = sampledNormal.x;
+      normals[offset + 1] = sampledNormal.y;
+      normals[offset + 2] = sampledNormal.z;
+      tangents[offset] = sampledTangent.x;
+      tangents[offset + 1] = sampledTangent.y;
+      tangents[offset + 2] = sampledTangent.z;
       const yProgress = THREE.MathUtils.clamp((worldY - bounds.min.y) / yRange, 0, 1);
       sections[point] = Math.min(3, Math.floor(yProgress * 4));
       const colorOffset = triangleOffset * 3;
@@ -555,6 +661,8 @@ export async function createMaterializationPointCloudFromGlb(
 
     return {
       positions,
+      normals,
+      tangents,
       colors,
       sections,
       count: safePointCount,

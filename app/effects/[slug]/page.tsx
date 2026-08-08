@@ -11,6 +11,7 @@ import {
   SITE_LICENSE_URL,
   SITE_MAINTAINER_NAME,
   SITE_MAINTAINER_URL,
+  SITE_STYLIZED_POINT_FIELD_SOCIAL_IMAGE,
   SITE_PUBLISHED_DATE,
   SITE_SOURCE_COMMIT,
   SITE_THREE_VERSION,
@@ -36,6 +37,14 @@ export async function generateMetadata({ params }: EffectPageProps): Promise<Met
     description: effect.seo.description,
     path: `/effects/${effect.slug}`,
     keywords: [effect.seo.primaryKeyword, effect.family, ...effect.drivers, ...effect.techniques],
+    socialImage:
+      effect.id === "stylized-materialization"
+        ? SITE_STYLIZED_POINT_FIELD_SOCIAL_IMAGE
+        : undefined,
+    socialImageAlt:
+      effect.id === "stylized-materialization"
+        ? "Echoes Shaders point field shown as neon ribbons, binary glyphs, and pooled ink"
+        : undefined,
   });
 }
 

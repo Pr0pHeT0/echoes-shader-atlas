@@ -9,11 +9,11 @@ import {
   min,
   mix,
   modelViewMatrix,
-  mx_noise_float,
   normalize,
   screenDPR,
   sin,
   smoothstep,
+  sRGBTransferEOTF,
   uniform,
   uv,
   varying,
@@ -26,6 +26,7 @@ import { loadFontFacesWithFallback } from "../font-loading";
 import { seededValue } from "../geometry";
 import { EFFECT_PRESETS, TITLE_UNIFORM_DEFAULTS } from "../runtime-config";
 import { clampDpr, makeShowcaseScene, resolveParticleCount } from "../runtime-utils";
+import { simplexNoise4d } from "../tsl/simplex-noise-4d";
 import type { EffectFrame, EffectInstance, EffectRuntimeContext } from "../types";
 
 const PRESETS = EFFECT_PRESETS["morphing-echoes-title"];
@@ -332,12 +333,10 @@ class MorphingTitleRuntime implements EffectInstance {
       seed.mul(0.62).add(0.2).mul(fontTransformPulse),
     ));
 
-    // MaterialX noise is backend-independent TSL, with time folded into the
-    // coordinates to retain the original animated 4D-flow character.
-    const titleNoise = mx_noise_float(vec3(
-      titlePosition.x.mul(0.72).add(this.timeNode.mul(0.11)),
-      titlePosition.y.mul(0.72).sub(this.timeNode.mul(0.07)),
-      titlePosition.z.mul(2.4).add(seed).add(this.timeNode.mul(0.16)),
+    const titleNoise = simplexNoise4d(vec4(
+      titlePosition.xy.mul(0.72),
+      titlePosition.z.mul(2.4).add(seed),
+      this.timeNode.mul(0.16),
     ));
     const ribbon = sin(titlePosition.x.mul(1.85).sub(this.timeNode.mul(0.72)).add(seed.mul(4)));
     const flowingTitlePosition = titlePosition.add(vec3(
@@ -386,22 +385,21 @@ class MorphingTitleRuntime implements EffectInstance {
     const activeOrbShape = mix(orbPosition, icosahedronPosition, this.icosahedronNode);
     const orbNormal = normalize(activeOrbShape.add(vec3(0.0001)));
     const orbBreath = sin(this.timeNode.mul(1.1).add(seed.mul(10))).mul(0.018);
-    const orbRipple = mx_noise_float(activeOrbShape.mul(1.8).add(vec3(
-      this.timeNode.mul(0.12),
-      this.timeNode.mul(-0.09),
+    const orbRipple = simplexNoise4d(vec4(
+      activeOrbShape.mul(1.8),
       this.timeNode.mul(0.18),
-    ))).mul(0.024);
+    )).mul(0.024);
     const orbFlowTime = this.timeNode.mul(0.1);
     const orbFlowSample = activeOrbShape.mul(0.72);
     const orbFlow = vec3(
-      mx_noise_float(orbFlowSample.add(vec3(0, 0, orbFlowTime))),
-      mx_noise_float(orbFlowSample.add(vec3(1, 1, orbFlowTime.add(1)))),
-      mx_noise_float(orbFlowSample.add(vec3(2, 2, orbFlowTime.add(2)))),
+      simplexNoise4d(vec4(orbFlowSample, orbFlowTime)),
+      simplexNoise4d(vec4(orbFlowSample.add(1), orbFlowTime)),
+      simplexNoise4d(vec4(orbFlowSample.add(2), orbFlowTime)),
     );
     const orbFlowMask = smoothstep(
       -0.2,
       0.8,
-      mx_noise_float(activeOrbShape.mul(0.9).add(vec3(0, 0, orbFlowTime.add(1)))),
+      simplexNoise4d(vec4(activeOrbShape.mul(0.9), orbFlowTime.add(1))),
     );
     const orbFlowDirection = normalize(orbFlow.add(vec3(0.0001)));
     const breathingOrb = activeOrbShape.mul(orbBreath.add(orbRipple).add(1))
@@ -474,12 +472,14 @@ class MorphingTitleRuntime implements EffectInstance {
       .mul(particleAlpha)
       .mul(mix(1, orbCore, particleOrb));
     const outputAlpha = surfaceAlpha.add(halo.mul(particleAlpha).mul(0.11));
+    const legacyOutputColor = sRGBTransferEOTF(vec3(outputColor)) as THREE.Node<"vec3">;
 
     this.pixelRatioNode.value = clampDpr(context.dpr);
     this.material = new THREE.PointsNodeMaterial({
       transparent: true,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
+      fog: false,
       sizeAttenuation: false,
     });
     this.material.positionNode = transformed;
@@ -487,7 +487,10 @@ class MorphingTitleRuntime implements EffectInstance {
     // the explicit clamped-DPR contract of the archived GLSL shader.
     this.material.sizeNode = vec2(pointSize.mul(this.pixelRatioNode).div(max(screenDPR, 0.001)));
     this.material.maskNode = radiusSquared.lessThanEqual(1);
-    this.material.colorNode = vec4(outputColor, outputAlpha);
+    // The archived raw fragment wrote display-coded values directly and did
+    // not include Three's colorspace chunk. Decode here so the renderer's
+    // output transform lands on the same visible RGB values.
+    this.material.colorNode = vec4(legacyOutputColor, outputAlpha);
 
     this.points = new THREE.Sprite(this.material);
     this.points.geometry = this.geometry;

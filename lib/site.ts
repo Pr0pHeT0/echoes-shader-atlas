@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 export const SITE_NAME = "Echoes Shaders";
 export const SITE_URL = "https://shader.echoes.art";
 export const SITE_DESCRIPTION =
-  "Explore five open-source GLSL shader examples rebuilt in Three.js TSL for WebGPU with WebGL2 fallback: aurora, audio particles, type morphs, and GPGPU reveals.";
+  "Explore five recovered GLSL systems plus one authored point-field study, rebuilt in Three.js TSL for WebGPU with WebGL2 fallback and interactive controls.";
 export const SITE_SOCIAL_DESCRIPTION =
   "Live WebGPU and WebGL2 shader studies with readable GLSL source, interactive controls, and open Three.js TSL implementations.";
 export const SITE_GITHUB_URL = "https://github.com/Pr0pHeT0/echoes-shader-atlas";
@@ -18,6 +18,8 @@ export const SITE_THREE_VERSION = "0.185.0";
 export const SITE_PUBLISHED_DATE = "2026-08-06";
 export const SITE_UPDATED_DATE = "2026-08-08";
 export const SITE_SOCIAL_IMAGE = `${SITE_URL}/og.png`;
+export const SITE_STYLIZED_POINT_FIELD_SOCIAL_IMAGE =
+  `${SITE_URL}/og-stylized-point-field.png`;
 
 export const SITE_KEYWORDS = [
   "GLSL",
@@ -41,6 +43,8 @@ type PageMetadataOptions = {
   description?: string;
   path: string;
   keywords?: readonly string[];
+  socialImage?: string;
+  socialImageAlt?: string;
 };
 
 /** Build consistent, production-canonical metadata for a public site route. */
@@ -49,6 +53,8 @@ export function createPageMetadata({
   description = SITE_DESCRIPTION,
   path,
   keywords = [],
+  socialImage = SITE_SOCIAL_IMAGE,
+  socialImageAlt = "Echoes Shaders particle orb opening into procedural terrain",
 }: PageMetadataOptions): Metadata {
   const canonical = absoluteUrl(path);
   const socialTitle = title ? `${title} | ${SITE_NAME}` : SITE_NAME;
@@ -67,10 +73,10 @@ export function createPageMetadata({
       description,
       images: [
         {
-          url: SITE_SOCIAL_IMAGE,
+          url: socialImage,
           width: 1200,
           height: 630,
-          alt: "Echoes Shaders particle orb opening into procedural terrain",
+          alt: socialImageAlt,
         },
       ],
     },
@@ -78,7 +84,7 @@ export function createPageMetadata({
       card: "summary_large_image",
       title: socialTitle,
       description,
-      images: [SITE_SOCIAL_IMAGE],
+      images: [socialImage],
     },
   };
 }

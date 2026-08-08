@@ -3,13 +3,15 @@ export type EffectId =
   | "voice-wave-particles"
   | "morphing-echoes-title"
   | "orb-to-scene-reveal"
-  | "audio-reactive-materialization";
+  | "audio-reactive-materialization"
+  | "stylized-materialization";
 
 export type EffectFamily =
   | "Procedural Backdrop"
   | "Audio Visualization"
   | "Particle Typography"
   | "Point-cloud Transition"
+  | "Point-Cloud Styling"
   | "GPGPU Materialization";
 
 export type EffectStatus = "active" | "archived";

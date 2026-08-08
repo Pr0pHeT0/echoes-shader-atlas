@@ -115,11 +115,89 @@ function makeColoredTriangleGlb({ baseColorFactor, vertexColor = null }) {
   }, binary);
 }
 
+function makeFramedTriangleGlb({ normals = null, tangents = null, node = {} } = {}) {
+  const positions = new Float32Array([
+    0, 0, 0,
+    1, 0, 0,
+    0, 1, 0,
+  ]);
+  const chunks = [positions];
+  if (normals) chunks.push(new Float32Array(normals));
+  if (tangents) chunks.push(new Float32Array(tangents));
+  const byteLength = chunks.reduce((total, chunk) => total + chunk.byteLength, 0);
+  const binary = new Uint8Array(byteLength);
+  const bufferViews = [];
+  const accessors = [];
+  const attributes = {};
+  let byteOffset = 0;
+
+  function addAttribute(name, values, type, min, max) {
+    const bufferView = bufferViews.length;
+    bufferViews.push({ buffer: 0, byteOffset, byteLength: values.byteLength });
+    const accessor = {
+      bufferView,
+      componentType: 5126,
+      count: 3,
+      type,
+      ...(min ? { min } : {}),
+      ...(max ? { max } : {}),
+    };
+    accessors.push(accessor);
+    attributes[name] = accessors.length - 1;
+    binary.set(new Uint8Array(values.buffer, values.byteOffset, values.byteLength), byteOffset);
+    byteOffset += values.byteLength;
+  }
+
+  addAttribute("POSITION", chunks[0], "VEC3", [0, 0, 0], [1, 1, 0]);
+  let chunk = 1;
+  if (normals) addAttribute("NORMAL", chunks[chunk++], "VEC3");
+  if (tangents) addAttribute("TANGENT", chunks[chunk], "VEC4");
+
+  return makeGlb({
+    asset: { version: "2.0" },
+    buffers: [{ byteLength: binary.byteLength }],
+    bufferViews,
+    accessors,
+    meshes: [{ primitives: [{ attributes, mode: 4 }] }],
+    nodes: [{ mesh: 0, ...node }],
+    scenes: [{ nodes: [0] }],
+    scene: 0,
+  }, binary);
+}
+
 function assertColor(pointCloud, expected, tolerance = 1e-6) {
   for (let index = 0; index < pointCloud.colors.length; index += 3) {
     assert.ok(Math.abs(pointCloud.colors[index] - expected[0]) <= tolerance);
     assert.ok(Math.abs(pointCloud.colors[index + 1] - expected[1]) <= tolerance);
     assert.ok(Math.abs(pointCloud.colors[index + 2] - expected[2]) <= tolerance);
+  }
+}
+
+function assertOrthonormalFrames(pointCloud, tolerance = 1e-5) {
+  assert.equal(pointCloud.normals.length, pointCloud.count * 3);
+  assert.equal(pointCloud.tangents.length, pointCloud.count * 3);
+  for (let index = 0; index < pointCloud.count; index += 1) {
+    const offset = index * 3;
+    const normal = pointCloud.normals.subarray(offset, offset + 3);
+    const tangent = pointCloud.tangents.subarray(offset, offset + 3);
+    assert.ok([...normal, ...tangent].every(Number.isFinite));
+    assert.ok(Math.abs(Math.hypot(...normal) - 1) <= tolerance);
+    assert.ok(Math.abs(Math.hypot(...tangent) - 1) <= tolerance);
+    assert.ok(Math.abs(
+      normal[0] * tangent[0]
+      + normal[1] * tangent[1]
+      + normal[2] * tangent[2]
+    ) <= tolerance);
+  }
+}
+
+function assertFrame(pointCloud, expectedNormal, expectedTangent, tolerance = 1e-5) {
+  for (let index = 0; index < pointCloud.count; index += 1) {
+    const offset = index * 3;
+    for (let channel = 0; channel < 3; channel += 1) {
+      assert.ok(Math.abs(pointCloud.normals[offset + channel] - expectedNormal[channel]) <= tolerance);
+      assert.ok(Math.abs(pointCloud.tangents[offset + channel] - expectedTangent[channel]) <= tolerance);
+    }
   }
 }
 
@@ -132,10 +210,14 @@ test("GLB geometry is sampled deterministically, normalized, and divided into fo
   assert.equal(first.meshCount, 2);
   assert.equal(first.triangleCount, 2);
   assert.deepEqual(first.positions, second.positions);
+  assert.deepEqual(first.normals, second.normals);
+  assert.deepEqual(first.tangents, second.tangents);
   assert.deepEqual(first.colors, second.colors);
   assert.deepEqual(first.sections, second.sections);
   assert.ok([...first.positions].every(Number.isFinite));
   assert.ok([...first.colors].every((value) => Number.isFinite(value) && value >= 0 && value <= 1));
+  assertOrthonormalFrames(first);
+  assertFrame(first, [0, 0, 1], [1, 0, 0]);
   assertColor(first, [1, 1, 1]);
   assert.deepEqual([...new Set(first.sections)].sort(), [0, 1, 2, 3]);
   assert.deepEqual([...new Set(first.sections.slice(0, 1_024))].sort(), [0, 1, 2, 3]);
@@ -165,6 +247,72 @@ test("GLB points preserve base-material color and multiply interpolated RGB vert
     64,
   );
   assertColor(vertexAndMaterial, [0.2, 0.2, 0.5]);
+});
+
+test("GLB points barycentrically interpolate normals and tangents into orthonormal frames", async () => {
+  const diagonal = Math.SQRT1_2;
+  const pointCloud = await createMaterializationPointCloudFromGlb(makeFramedTriangleGlb({
+    normals: [
+      0, 0, 1,
+      0, diagonal, diagonal,
+      diagonal, 0, diagonal,
+    ],
+    tangents: [
+      1, 0, 0, 1,
+      1, 0, 0, 1,
+      0, 1, 0, 1,
+    ],
+  }), 96);
+
+  assertOrthonormalFrames(pointCloud);
+  for (let index = 0; index < pointCloud.count; index += 1) {
+    const offset = index * 3;
+    const weightB = pointCloud.positions[offset] / 3.8 + 0.5;
+    const weightC = pointCloud.positions[offset + 1] / 3.8 + 0.5;
+    const weightA = 1 - weightB - weightC;
+    const expectedNormal = [
+      weightC * diagonal,
+      weightB * diagonal,
+      weightA + (weightB + weightC) * diagonal,
+    ];
+    const normalLength = Math.hypot(...expectedNormal);
+    for (let channel = 0; channel < 3; channel += 1) expectedNormal[channel] /= normalLength;
+
+    const expectedTangent = [weightA + weightB, weightC, 0];
+    const tangentDot = expectedTangent[0] * expectedNormal[0]
+      + expectedTangent[1] * expectedNormal[1]
+      + expectedTangent[2] * expectedNormal[2];
+    for (let channel = 0; channel < 3; channel += 1) {
+      expectedTangent[channel] -= expectedNormal[channel] * tangentDot;
+    }
+    const tangentLength = Math.hypot(...expectedTangent);
+    for (let channel = 0; channel < 3; channel += 1) expectedTangent[channel] /= tangentLength;
+
+    for (let channel = 0; channel < 3; channel += 1) {
+      assert.ok(Math.abs(pointCloud.normals[offset + channel] - expectedNormal[channel]) <= 1e-5);
+      assert.ok(Math.abs(pointCloud.tangents[offset + channel] - expectedTangent[channel]) <= 1e-5);
+    }
+  }
+});
+
+test("GLB frame transforms use inverse-transpose normals and transformed tangent directions", async () => {
+  const rotation = [0, Math.SQRT1_2, 0, Math.SQRT1_2];
+  const node = { rotation, scale: [2, 3, 0.5] };
+  const supplied = await createMaterializationPointCloudFromGlb(makeFramedTriangleGlb({
+    normals: [0, 0, 1, 0, 0, 1, 0, 0, 1],
+    tangents: [1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1],
+    node,
+  }), 64);
+  assertOrthonormalFrames(supplied);
+  assertFrame(supplied, [1, 0, 0], [0, 0, -1]);
+
+  const fallback = await createMaterializationPointCloudFromGlb(makeFramedTriangleGlb({
+    normals: new Array(9).fill(0),
+    tangents: new Array(12).fill(0),
+    node,
+  }), 64);
+  assertOrthonormalFrames(fallback);
+  assertFrame(fallback, [1, 0, 0], [0, 1, 0]);
 });
 
 test("the importer rejects external resources and unsupported geometry compression before parsing", async () => {

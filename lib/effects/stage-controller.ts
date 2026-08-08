@@ -5,6 +5,7 @@ import type {
   EffectInstance,
   EffectPointer,
   MaterializationPointCloud,
+  StylizedPointTarget,
 } from "./types";
 
 export type StageQuality = "low" | "auto" | "high";
@@ -61,6 +62,7 @@ export interface StageRuntimeContext {
   particleCount: number;
   reducedMotion: boolean;
   pointCloud?: MaterializationPointCloud | null;
+  pointTarget?: StylizedPointTarget;
 }
 
 export interface StageStatus {
@@ -82,6 +84,7 @@ export interface StageControllerOptions {
   syntheticAudio?: boolean;
   audio?: AudioMetrics;
   pointCloud?: MaterializationPointCloud | null;
+  pointTarget?: StylizedPointTarget;
 }
 
 const ZERO_AUDIO: AudioMetrics = { level: 0, bass: 0, mid: 0, treble: 0 };
@@ -132,6 +135,7 @@ export class ShaderStageController {
   private useSyntheticAudio: boolean;
   private audio: AudioMetrics;
   private pointCloud: MaterializationPointCloud | null;
+  private readonly pointTarget?: StylizedPointTarget;
   private pointer: EffectPointer | null = null;
 
   constructor(options: StageControllerOptions) {
@@ -142,6 +146,7 @@ export class ShaderStageController {
     this.useSyntheticAudio = options.syntheticAudio ?? false;
     this.audio = options.audio ?? ZERO_AUDIO;
     this.pointCloud = options.pointCloud ?? null;
+    this.pointTarget = options.pointTarget;
     this.reducedMotion = options.environment.matchMedia("(prefers-reduced-motion: reduce)").matches;
     this.dpr = Math.min(Math.max(options.environment.devicePixelRatio || 1, 0.5), 1.5);
     this.particleCount = selectStageParticleCount(options.quality, options.environment);
@@ -187,6 +192,7 @@ export class ShaderStageController {
         particleCount: this.particleCount,
         reducedMotion: this.reducedMotion,
         pointCloud: this.pointCloud,
+        pointTarget: this.pointTarget,
       });
       if (this.disposed || generation !== this.generation) {
         instance.dispose();
@@ -279,6 +285,7 @@ export class ShaderStageController {
     this.renderer.setPixelRatio(this.dpr);
     this.renderer.setSize(width, height, false);
     this.instance?.resize(width, height, this.dpr);
+    if (this.instance && (this.paused || this.reducedMotion)) this.renderStaticFrame();
   }
 
   private startAnimationLoop(): void {
@@ -302,6 +309,7 @@ export class ShaderStageController {
       pointer: this.pointer,
       audio: this.useSyntheticAudio ? syntheticStageAudio(elapsed) : this.audio,
     });
+    this.instance.prepareRender?.();
     this.renderer.render(this.instance.scene, this.instance.camera);
   }
 
@@ -323,6 +331,7 @@ export class ShaderStageController {
       audio: this.useSyntheticAudio ? syntheticStageAudio(elapsed) : this.audio,
     };
     this.instance.update(frame);
+    this.instance.prepareRender?.();
     this.renderer.render(this.instance.scene, this.instance.camera);
   };
 

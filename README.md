@@ -1,13 +1,13 @@
 # Echoes Shaders
 
 An open-source field guide to five production WebGL shader systems, preserved as readable GLSL and
-rebuilt in Three.js TSL for WebGPU with automatic WebGL2 fallback. The project pairs live,
-interactive demonstrations with classification, presets, source tabs, provenance, and practical
-implementation notes.
+rebuilt in Three.js TSL for WebGPU with automatic WebGL2 fallback, plus one authored point-field
+study. The project pairs live, interactive demonstrations with classification, presets, source
+tabs, provenance, and practical implementation notes.
 
 The site is built with React, TypeScript, vinext, and Three.js `0.185.0`. It is static by design:
-there are no accounts, server uploads, microphone permissions, or persistence. The materialization
-study can process a self-contained GLB locally in the browser; its bytes and derived point cloud never
+there are no accounts, server uploads, microphone permissions, or persistence. The model-driven
+studies can process a self-contained GLB locally in the browser; its bytes and derived point cloud never
 leave the tab. Optional Google Analytics 4 measurement is consent-gated and the Google tag is not
 loaded unless a visitor explicitly accepts.
 
@@ -20,6 +20,7 @@ loaded unless a visitor explicitly accepts.
 | Morphing Echoes Title | Particle Typography | Time, pointer, font phase, preset state | Active |
 | Orb-to-Scene Reveal | Point-cloud Transition | Time, reveal progress, particle lifetime | Active |
 | Point-Cloud Materialization | GPGPU Materialization | Time, local geometry, vertex color, model complexity | Archived, fully demonstrated |
+| Stylized Point Field | Point-Cloud Styling | Time, style preset, base/terrain/local geometry | Active authored study |
 
 ## Quick start
 
@@ -70,8 +71,8 @@ record; retain that record to keep verification active.
 
 - `/` — immersive reel, classification filters, and the complete effect catalog.
 - `/effects/[slug]` — one live study with presets, playback and quality controls, synthetic-audio
-  controls where relevant, an optional browser-local GLB target for materialization, source tabs, and
-  implementation notes.
+  controls where relevant, an optional browser-local GLB target for both model-driven point studies,
+  source tabs, and implementation notes.
 - `/about` — extraction method, taxonomy, provenance, asset policy, licenses, and contribution guide.
 - `/privacy` — optional analytics disclosure and persistent consent controls.
 

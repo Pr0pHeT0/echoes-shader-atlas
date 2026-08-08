@@ -25,7 +25,7 @@ async function loadCatalog() {
   return import(`data:text/javascript;base64,${encoded}`);
 }
 
-test("catalog classifies the exact five shader systems", async () => {
+test("catalog classifies the five recovered systems and authored point-field study", async () => {
   const { effectFamilies, effectStatuses, shaderEffects } = await loadCatalog();
 
   assert.deepEqual(
@@ -36,9 +36,10 @@ test("catalog classifies the exact five shader systems", async () => {
       { id: "morphing-echoes-title", family: "Particle Typography", status: "active" },
       { id: "orb-to-scene-reveal", family: "Point-cloud Transition", status: "active" },
       { id: "audio-reactive-materialization", family: "GPGPU Materialization", status: "archived" },
+      { id: "stylized-materialization", family: "Point-Cloud Styling", status: "active" },
     ],
   );
-  assert.deepEqual(effectFamilies, shaderEffects.map((effect) => effect.family));
+  assert.deepEqual(effectFamilies, [...new Set(shaderEffects.map((effect) => effect.family))]);
   assert.deepEqual(effectStatuses, ["active", "archived"]);
 
   for (const effect of shaderEffects) {
@@ -97,7 +98,7 @@ test("catalog lookup, filters, and JSON serialization are deterministic", async 
   );
   assert.deepEqual(
     filterShaderEffects({ driver: "local geometry" }).map((effect) => effect.id),
-    ["audio-reactive-materialization"],
+    ["audio-reactive-materialization", "stylized-materialization"],
   );
   assert.equal(
     getEffectBySlug("audio-reactive-materialization")?.drivers.some((driver) => driver.startsWith("Synthetic")),
@@ -107,6 +108,23 @@ test("catalog lookup, filters, and JSON serialization are deterministic", async 
   const serialized = JSON.stringify(shaderEffects);
   assert.deepEqual(JSON.parse(serialized), shaderEffects);
   assert.equal(serialized.includes("function"), false);
+});
+
+test("Stylized Point Field documents three styles and three static target sources", async () => {
+  const { getEffectBySlug } = await loadCatalog();
+  const remix = getEffectBySlug("stylized-materialization");
+  assert.ok(remix);
+
+  const copy = JSON.stringify(remix);
+  assert.match(copy, /target-tangent|tangent neon ribbons/i);
+  assert.match(copy, /single-channel binary SDF|binary-led SDF/i);
+  assert.match(copy, /shared blurred (?:pigment|splat) mask/i);
+  assert.match(copy, /4 × 4 SDF/i);
+  assert.match(copy, /base torus/i);
+  assert.match(copy, /seeded terrain/i);
+  assert.match(copy, /local GLB|browser-local GLB/i);
+  assert.doesNotMatch(copy, /shared GPGPU flow|four-section reveal|section progress/i);
+  assert.doesNotMatch(copy, /immutable 64-glyph ASCII atlas/i);
 });
 
 test("catalog SEO copy is unique, bounded, connected, and serializable", async () => {

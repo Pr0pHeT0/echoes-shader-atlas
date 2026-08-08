@@ -7,6 +7,7 @@ export const EFFECT_IDS = [
   "morphing-echoes-title",
   "orb-to-scene-reveal",
   "audio-reactive-materialization",
+  "stylized-materialization",
 ] as const;
 
 export type EffectId = (typeof EFFECT_IDS)[number];
@@ -27,12 +28,16 @@ export interface EffectPointer {
 
 export interface MaterializationPointCloud {
   positions: Float32Array;
+  normals: Float32Array;
+  tangents: Float32Array;
   colors: Float32Array;
   sections: Float32Array;
   count: number;
   meshCount: number;
   triangleCount: number;
 }
+
+export type StylizedPointTarget = "base" | "terrain" | "uploaded";
 
 export interface EffectFrame {
   elapsed: number;
@@ -53,8 +58,10 @@ export interface EffectRuntimeContext {
   /** Requested budget. Runtimes clamp this to 16K/64K policy limits. */
   particleCount: number;
   reducedMotion: boolean;
-  /** Optional browser-local geometry target for the materialization runtime. */
+  /** Optional browser-local surface target used by point-based runtimes. */
   pointCloud?: MaterializationPointCloud | null;
+  /** Static geometry source for the authored stylized point-field study. */
+  pointTarget?: StylizedPointTarget;
 }
 
 export interface EffectInstance {
@@ -63,6 +70,7 @@ export interface EffectInstance {
   readonly camera: THREE.PerspectiveCamera;
   readonly presets: readonly string[];
   update(frame: EffectFrame): void;
+  prepareRender?(): void;
   resize(width: number, height: number, dpr: number): void;
   setPreset(preset: string): void;
   dispose(): void;

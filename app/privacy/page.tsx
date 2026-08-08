@@ -60,8 +60,8 @@ export default function PrivacyPage() {
             <p>
               When allowed, measurement covers route views and a small set of product interactions:
               choosing an effect, filtering the catalog, changing preview controls, selecting a
-              source tab, copying shader source, and a fixed success-or-error result when the optional
-              local model importer is used.
+              source tab, copying shader source, and fixed import results and target choices when the
+              optional local model importer is used.
             </p>
           </section>
 
@@ -74,7 +74,7 @@ export default function PrivacyPage() {
               analytics. Event details are limited to fixed catalog labels and control choices.
             </p>
             <p>
-              On the materialization study, a self-contained GLB can be read directly in browser
+              On the model-driven point studies, a self-contained GLB can be read directly in browser
               memory and converted into a bounded point target. The selected file and derived geometry
               are never sent to a server, saved, or retained after refresh or navigation.
             </p>

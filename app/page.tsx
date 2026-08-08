@@ -31,7 +31,7 @@ const collectionStructuredData = {
     {
       "@type": "ItemList",
       "@id": `${SITE_URL}/#effect-list`,
-      name: "Five classified shader systems",
+      name: "Six classified shader studies",
       numberOfItems: shaderEffects.length,
       itemListOrder: "https://schema.org/ItemListOrderAscending",
       itemListElement: shaderEffects.map((effect) => ({

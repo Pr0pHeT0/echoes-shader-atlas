@@ -97,8 +97,8 @@ export default function AboutPage() {
               <li><strong>Effects</strong><span>{shaderEffects.length} classified systems</span></li>
               <li><strong>Source units</strong><span>{shaderSourceUnits.length} original units</span></li>
               <li><strong>Status</strong><span>{activeCount} active · {archivedCount} archived</span></li>
-              <li><strong>Languages</strong><span>TypeScript · GLSL</span></li>
-              <li><strong>Runtime</strong><span>Three.js {SITE_THREE_VERSION} · WebGL2</span></li>
+              <li><strong>Languages</strong><span>TypeScript · TSL · GLSL archive</span></li>
+              <li><strong>Runtime</strong><span>Three.js {SITE_THREE_VERSION} · WebGPU / WebGL2</span></li>
               <li>
                 <strong>Maintainer</strong>
                 <span>
@@ -109,7 +109,7 @@ export default function AboutPage() {
               </li>
               <li>
                 <strong>Verified</strong>
-                <span><time dateTime={SITE_UPDATED_DATE}>August 6, 2026</time></span>
+                <span><time dateTime={SITE_UPDATED_DATE}>August 8, 2026</time></span>
               </li>
             </ul>
           </section>
@@ -201,7 +201,7 @@ export default function AboutPage() {
             <p>
               Contributions should preserve provenance, deterministic fallbacks, accessibility, and the
               serializable catalog contract. New effects need a documented source license, a bounded
-              runtime lifecycle, and a useful non-WebGL fallback.
+              runtime lifecycle, and a useful fallback when GPU rendering is unavailable.
             </p>
             <p>
               Start with the{" "}

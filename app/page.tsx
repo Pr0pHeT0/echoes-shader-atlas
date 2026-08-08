@@ -10,7 +10,7 @@ export const metadata: Metadata = createPageMetadata({
   title: "Open-Source GLSL Shader Examples",
   path: "/",
   description: SITE_DESCRIPTION,
-  keywords: ["GLSL shader gallery", "Three.js examples", "WebGL demos"],
+  keywords: ["GLSL shader gallery", "Three.js examples", "WebGPU demos", "TSL shaders"],
 });
 
 const collectionStructuredData = {
@@ -26,7 +26,7 @@ const collectionStructuredData = {
       inLanguage: "en",
       isPartOf: { "@id": `${SITE_URL}/#website` },
       mainEntity: { "@id": `${SITE_URL}/#effect-list` },
-      about: ["GLSL", "Three.js", "WebGL2", "GPGPU", "particle systems"],
+      about: ["GLSL", "TSL", "Three.js", "WebGPU", "WebGL2", "GPGPU", "particle systems"],
     },
     {
       "@type": "ItemList",

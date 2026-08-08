@@ -79,6 +79,8 @@ test("server-renders every effect permalink with its own classified content", as
       assert.match(html, new RegExp(effectNames.get(effectId), "i"));
       assert.match(html, /Source|GLSL/i);
       assert.match(html, /Preset/i);
+      assert.match(html, /aria-label=["']Renderer["']/i);
+      assert.match(html, /WebGPU/i);
       assert.match(html, /WebGL2/i);
       assert.match(html, /Echoes Shaders/i);
       assert.match(html, /<meta[^>]+property=["']og:image["'][^>]+og\.png/i);

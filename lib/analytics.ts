@@ -7,6 +7,7 @@ export type AnalyticsEventName =
   | "playback_change"
   | "preset_change"
   | "quality_change"
+  | "renderer_change"
   | "source_copy"
   | "source_tab_select"
   | "study_open"

@@ -71,7 +71,7 @@ Keep these project guarantees intact:
   browser memory;
 - capped device pixel ratio and bounded particle counts;
 - pause work while the document is hidden;
-- reduced-motion and WebGL-unavailable fallbacks; and
+- reduced-motion and GPU-backend-unavailable fallbacks; and
 - keyboard-accessible controls with visible focus states.
 
 ## Pull requests

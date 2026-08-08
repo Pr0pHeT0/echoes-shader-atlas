@@ -6,7 +6,12 @@ import type { ShaderEffectMeta } from "@/lib/catalog/types";
 import { effectShaderSources } from "@/lib/effects/source-registry";
 import { trackEvent } from "@/lib/analytics";
 import { SITE_GITHUB_URL, SITE_MANIFEST_URL, SITE_THREE_VERSION } from "@/lib/site";
-import { ShaderStage, type ShaderStageAudio, type ShaderStageQuality } from "./ShaderStage";
+import {
+  ShaderStage,
+  type ShaderStageAudio,
+  type ShaderStageQuality,
+  type ShaderStageRenderer,
+} from "./ShaderStage";
 import { SourceBrowser } from "./SourceBrowser";
 import type { MaterializationPointCloud } from "@/lib/effects/types";
 
@@ -46,6 +51,7 @@ export function EffectDetail({ effect }: { effect: ShaderEffectMeta }) {
   const [preset, setPreset] = useState(effect.presets[0]?.id ?? "default");
   const [paused, setPaused] = useState(false);
   const [quality, setQuality] = useState<ShaderStageQuality>("auto");
+  const [rendererMode, setRendererMode] = useState<ShaderStageRenderer>("webgpu");
   const [restartKey, setRestartKey] = useState(0);
   const [automaticAudio, setAutomaticAudio] = useState(true);
   const [audio, setAudio] = useState<ShaderStageAudio>(defaultAudio);
@@ -69,6 +75,17 @@ export function EffectDetail({ effect }: { effect: ShaderEffectMeta }) {
 
   useEffect(() => () => {
     modelImportGeneration.current += 1;
+  }, []);
+
+  useEffect(() => {
+    function syncRendererFromUrl() {
+      const requested = new URLSearchParams(window.location.search).get("renderer");
+      setRendererMode(requested === "webgl2" ? "webgl2" : "webgpu");
+    }
+
+    syncRendererFromUrl();
+    window.addEventListener("popstate", syncRendererFromUrl);
+    return () => window.removeEventListener("popstate", syncRendererFromUrl);
   }, []);
 
   function setAudioBand(band: keyof ShaderStageAudio, value: number) {
@@ -110,6 +127,24 @@ export function EffectDetail({ effect }: { effect: ShaderEffectMeta }) {
   function selectQuality(value: ShaderStageQuality) {
     setQuality(value);
     trackEvent("quality_change", { effect_id: effect.id, quality: value });
+  }
+
+  function selectRenderer(value: ShaderStageRenderer) {
+    if (value === rendererMode) return;
+
+    setRendererMode(value);
+    const url = new URL(window.location.href);
+    if (value === "webgl2") {
+      url.searchParams.set("renderer", "webgl2");
+    } else {
+      url.searchParams.delete("renderer");
+    }
+    window.history.replaceState(
+      window.history.state,
+      "",
+      `${url.pathname}${url.search}${url.hash}`,
+    );
+    trackEvent("renderer_change", { effect_id: effect.id, renderer: value });
   }
 
   function toggleAutomaticAudio() {
@@ -185,11 +220,12 @@ export function EffectDetail({ effect }: { effect: ShaderEffectMeta }) {
       <section className="detail-hero" aria-labelledby="effect-title">
         <Breadcrumbs current={effect.name} floating />
         <ShaderStage
-          key={`${effect.id}-${restartKey}`}
+          key={`${effect.id}-${rendererMode}-${quality}-${restartKey}`}
           effectId={effect.id}
           preset={preset}
           paused={paused}
           quality={quality}
+          rendererMode={rendererMode}
           syntheticAudio={hasAudio && automaticAudio}
           audio={hasAudio ? audio : silentAudio}
           pointCloud={pointCloud}
@@ -208,6 +244,23 @@ export function EffectDetail({ effect }: { effect: ShaderEffectMeta }) {
         </div>
 
         <div className="detail-controls" aria-label="Shader preview controls">
+          <div className="control-group" role="group" aria-label="Renderer">
+            <span className="control-group__label">Renderer</span>
+            {(["webgpu", "webgl2"] as const).map((value) => (
+              <button
+                key={value}
+                className={`control-button${rendererMode === value ? " is-active" : ""}`}
+                type="button"
+                aria-pressed={rendererMode === value}
+                title={value === "webgpu"
+                  ? "Prefer WebGPU, with automatic WebGL2 fallback when WebGPU is unavailable."
+                  : "Force the WebGL2 compatibility backend."}
+                onClick={() => selectRenderer(value)}
+              >
+                {value === "webgpu" ? "WebGPU" : "WebGL2"}
+              </button>
+            ))}
+          </div>
           <div className="control-group" role="group" aria-label="Preset">
             <span className="control-group__label">Preset</span>
             {effect.presets.map((candidate) => (
@@ -266,13 +319,13 @@ export function EffectDetail({ effect }: { effect: ShaderEffectMeta }) {
           <div className="detail-prose">
             <p>{effect.description}</p>
             <p>
-              The visual equations and production defaults are retained. Only application-specific
-              orchestration and unlicensed model inputs were replaced, leaving a focused study that
-              can be read independently of the original product.
+              The visual behavior and production defaults are retained in the TSL adaptation. Only
+              application-specific orchestration and unlicensed model inputs were replaced, leaving
+              a focused study that can be read independently of the original product.
             </p>
             <p>
-              This preview uses one managed WebGL2 context, a capped pixel ratio, deterministic
-              geometry, and complete GPU cleanup when you leave or switch studies.
+              This preview uses one managed WebGPU renderer with automatic WebGL2 fallback, a capped
+              pixel ratio, deterministic geometry, and complete GPU cleanup when you leave or switch studies.
             </p>
             <div className="effect-workflow" aria-labelledby="workflow-title">
               <h3 id="workflow-title">Pipeline, step by step</h3>
@@ -288,9 +341,9 @@ export function EffectDetail({ effect }: { effect: ShaderEffectMeta }) {
             <div className="technical-notes" aria-label="Compatibility and credits">
               <p>
                 <strong>Compatibility</strong>
-                The live study uses Three.js {SITE_THREE_VERSION} and requires WebGL2. Source,
-                classification, and notes remain readable when graphics are unavailable,
-                animation is disabled, or the context is lost.
+                The live study uses Three.js {SITE_THREE_VERSION}, preferring WebGPU and falling back
+                automatically to WebGL2. Source, classification, and notes remain readable when graphics
+                are unavailable, animation is disabled, or the graphics device is lost.
               </p>
               <p>
                 <strong>Credit</strong>

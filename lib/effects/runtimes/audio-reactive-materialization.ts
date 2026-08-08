@@ -1,10 +1,25 @@
-import * as THREE from "three";
-import { GPUComputationRenderer } from "three/examples/jsm/misc/GPUComputationRenderer.js";
+import * as THREE from "three/webgpu";
+import {
+  Fn,
+  dot,
+  instanceIndex,
+  instancedArray,
+  instancedBufferAttribute,
+  length,
+  max,
+  mix,
+  mx_noise_float,
+  normalize,
+  pow,
+  sin,
+  smoothstep,
+  sqrt,
+  uniform,
+  uv,
+  vec3,
+  vec4,
+} from "three/tsl";
 
-import computeSource from "../../shaders/materialization/materialization.compute.glsl?raw";
-import fragmentShader from "../../shaders/materialization/materialization.frag.glsl?raw";
-import vertexShader from "../../shaders/materialization/materialization.vert.glsl?raw";
-import { composeShader } from "../../shaders/compose";
 import { createSegmentedTorusKnot, seededValue } from "../geometry";
 import { EFFECT_PRESETS, MATERIALIZATION_DEFAULTS } from "../runtime-config";
 import {
@@ -22,22 +37,110 @@ import type {
 const PRESETS = EFFECT_PRESETS["audio-reactive-materialization"];
 const SECTION_COUNT = 4;
 
+type FloatNode = THREE.Node<"float">;
+type Vec3Node = THREE.Node<"vec3">;
+
+function temporalNoise(point: Vec3Node, time: FloatNode, phase = 0): FloatNode {
+  const animatedPoint = point.add(vec3(
+    time.mul(0.83),
+    time.mul(0.47),
+    time.mul(0.29),
+  )).add(vec3(phase * 19.19, phase * 7.73, phase * 3.17));
+  return mx_noise_float(animatedPoint);
+}
+
+function makeInstancedSprite(material: THREE.PointsNodeMaterial, count: number): THREE.Sprite {
+  // Sprite's public type has not yet caught up with its runtime NodeMaterial support.
+  const sprite = new THREE.Sprite(material as unknown as THREE.SpriteMaterial);
+  // The common renderer releases node-level attributes from the geometry's
+  // dispose listener. Do not leave material-specific buffers on Sprite's
+  // module-level shared quad, which intentionally lives for Three's lifetime.
+  sprite.geometry = sprite.geometry.clone();
+  sprite.count = count;
+  sprite.frustumCulled = false;
+  return sprite;
+}
+
+function disposeComputeOnlyStorage(
+  renderer: THREE.WebGPURenderer,
+  storage: THREE.StorageBufferNode<"vec4">,
+): void {
+  // r185 exposes no public per-storage-buffer disposal method. Render-visible
+  // buffers are released by owned geometry disposal; this compute-only input
+  // must go through the renderer's Attributes manager before renderer reuse.
+  const attributes = (renderer as THREE.WebGPURenderer & {
+    _attributes?: { delete(attribute: THREE.BufferAttribute): unknown };
+  })._attributes;
+  attributes?.delete(storage.value);
+}
+
+function sphereFragment(displayColor: Vec3Node, opacity: FloatNode | number = 1): THREE.Node<"vec4"> {
+  return Fn(() => {
+    const coordinate = uv().mul(2).sub(1);
+    const radiusSquared = dot(coordinate, coordinate);
+    radiusSquared.greaterThan(1).discard();
+    const normal = vec3(coordinate, sqrt(max(0, radiusSquared.oneMinus())));
+    const lightDirection = normalize(vec3(0.5, 0.8, 1));
+    const diffuse = max(dot(normal, lightDirection), 0);
+    const halfDirection = normalize(lightDirection.add(vec3(0, 0, 1)));
+    const specular = pow(max(dot(normal, halfDirection), 0), 32);
+    const litColor = displayColor.mul(diffuse.mul(0.5).add(0.5)).add(vec3(0.05).mul(specular));
+    return vec4(litColor, opacity);
+  })();
+}
+
 class MaterializationRuntime implements EffectInstance {
   readonly id = "audio-reactive-materialization" as const;
   readonly presets = PRESETS;
   readonly scene: THREE.Scene;
   readonly camera: THREE.PerspectiveCamera;
-  private readonly renderer: THREE.WebGLRenderer;
+  private readonly renderer: THREE.WebGPURenderer;
   private readonly reducedMotion: boolean;
   private readonly group = new THREE.Group();
-  private readonly geometry = new THREE.BufferGeometry();
-  private readonly material: THREE.ShaderMaterial;
-  private readonly points: THREE.Points;
-  private readonly sectionMeshes: Array<THREE.Mesh | THREE.Points> = [];
+  private readonly material: THREE.PointsNodeMaterial;
+  private readonly points: THREE.Sprite;
+  private readonly sectionMeshes: Array<THREE.Mesh | THREE.Sprite> = [];
   private readonly sectionMaterials: THREE.Material[] = [];
-  private readonly gpgpu: GPUComputationRenderer;
-  private readonly particlesVariable: ReturnType<GPUComputationRenderer["addVariable"]>;
-  private readonly baseTexture: THREE.DataTexture;
+  private readonly sectionGeometries: THREE.BufferGeometry[] = [];
+  private readonly particles: THREE.StorageBufferNode<"vec4">;
+  private readonly base: THREE.StorageBufferNode<"vec4">;
+  private readonly computeNode: THREE.ComputeNode;
+
+  private readonly time = uniform(0);
+  private readonly deltaTime = uniform(0);
+  private readonly flowFieldInfluence = uniform(MATERIALIZATION_DEFAULTS.flowFieldInfluence);
+  private readonly flowFieldStrength = uniform(MATERIALIZATION_DEFAULTS.flowFieldStrength);
+  private readonly flowFieldFrequency = uniform(MATERIALIZATION_DEFAULTS.flowFieldFrequency);
+  private readonly audioLevel = uniform(0);
+  private readonly bass = uniform(0);
+  private readonly mid = uniform(0);
+  private readonly treble = uniform(0);
+  private readonly shaderEnabled = uniform(1);
+  private readonly flowEnabled = uniform(1);
+  private readonly midFlowTimeEnabled = uniform(0);
+  private readonly midFlowTimeStrength = uniform(MATERIALIZATION_DEFAULTS.midFlowTimeStrength);
+  private readonly bassFlowInfluenceEnabled = uniform(0);
+  private readonly bassFlowInfluenceStrength = uniform(MATERIALIZATION_DEFAULTS.bassFlowInfluenceStrength);
+  private readonly trebleFlowFrequencyEnabled = uniform(0);
+  private readonly trebleFlowFrequencyStrength = uniform(MATERIALIZATION_DEFAULTS.trebleFlowFrequencyStrength);
+  private readonly audioGateEnabled = uniform(0);
+  private readonly audioGateLow = uniform(MATERIALIZATION_DEFAULTS.audioGateLow);
+  private readonly audioGateHigh = uniform(MATERIALIZATION_DEFAULTS.audioGateHigh);
+  private readonly audioGateBassMix = uniform(MATERIALIZATION_DEFAULTS.audioGateBassMix);
+  private readonly bassFlowStrengthEnabled = uniform(0);
+  private readonly bassFlowStrength = uniform(MATERIALIZATION_DEFAULTS.bassFlowStrength);
+  private readonly audioFlowEnabled = uniform(0);
+  private readonly audioFlowStrength = uniform(MATERIALIZATION_DEFAULTS.audioFlowStrength);
+  private readonly returnEnabled = uniform(1);
+  private readonly returnStrength = uniform(MATERIALIZATION_DEFAULTS.returnStrength);
+  private readonly materializedSectionCount = uniform(0);
+  private readonly bassRadialEnabled = uniform(0);
+  private readonly bassRadialPhase = uniform(MATERIALIZATION_DEFAULTS.bassRadialPhase);
+  private readonly bassRadialStrength = uniform(MATERIALIZATION_DEFAULTS.bassRadialStrength);
+  private readonly trebleSizeEnabled = uniform(0);
+  private readonly trebleSizeStrength = uniform(MATERIALIZATION_DEFAULTS.trebleSizeStrength);
+  private readonly pointSize: FloatNode;
+
   private currentPreset: (typeof PRESETS)[number] = "materialize";
   private lastElapsed = 0;
   private presetStartedAt = 0;
@@ -83,116 +186,145 @@ class MaterializationRuntime implements EffectInstance {
         targetSections[index] = THREE.MathUtils.clamp(Math.floor(uploaded.sections[sourceIndex]), 0, 3);
       }
     }
-    const textureSize = Math.ceil(Math.sqrt(count));
-    this.gpgpu = new GPUComputationRenderer(textureSize, textureSize, this.renderer);
-    this.baseTexture = this.gpgpu.createTexture();
-    const particlesTexture = this.gpgpu.createTexture();
-    const baseData = this.baseTexture.image!.data as Float32Array;
-    const particleData = particlesTexture.image!.data as Float32Array;
-    for (let index = 0; index < textureSize * textureSize; index += 1) {
-      const textureOffset = index * 4;
-      if (index >= count) continue;
+
+    const baseData = new Float32Array(count * 4);
+    const particleData = new Float32Array(count * 4);
+    const sizes = new Float32Array(count);
+    for (let index = 0; index < count; index += 1) {
       const positionOffset = index * 3;
+      const storageOffset = index * 4;
       for (let channel = 0; channel < 3; channel += 1) {
-        baseData[textureOffset + channel] = targetPositions[positionOffset + channel];
-        particleData[textureOffset + channel] = targetPositions[positionOffset + channel];
+        const value = targetPositions[positionOffset + channel];
+        baseData[storageOffset + channel] = value;
+        particleData[storageOffset + channel] = value;
       }
       if (uploaded) {
         const azimuth = seededValue(index, 71) * Math.PI * 2;
         const vertical = seededValue(index, 73) * 2 - 1;
         const horizontal = Math.sqrt(Math.max(0, 1 - vertical * vertical));
         const radius = 0.65 + seededValue(index, 79) * 1.35;
-        particleData[textureOffset] += Math.cos(azimuth) * horizontal * radius;
-        particleData[textureOffset + 1] += vertical * radius;
-        particleData[textureOffset + 2] += Math.sin(azimuth) * horizontal * radius;
+        particleData[storageOffset] += Math.cos(azimuth) * horizontal * radius;
+        particleData[storageOffset + 1] += vertical * radius;
+        particleData[storageOffset + 2] += Math.sin(azimuth) * horizontal * radius;
       }
       const lifetime = seededValue(index, 41);
-      baseData[textureOffset + 3] = lifetime;
-      particleData[textureOffset + 3] = lifetime;
-    }
-    this.particlesVariable = this.gpgpu.addVariable("uParticles", composeShader(computeSource), particlesTexture);
-    this.gpgpu.setVariableDependencies(this.particlesVariable, [this.particlesVariable]);
-    const computeUniforms = this.particlesVariable.material.uniforms;
-    computeUniforms.uTime = { value: 0 };
-    computeUniforms.uDeltaTime = { value: 0 };
-    computeUniforms.uBase = { value: this.baseTexture };
-    computeUniforms.uFlowFieldInfluence = { value: MATERIALIZATION_DEFAULTS.flowFieldInfluence };
-    computeUniforms.uFlowFieldStrength = { value: MATERIALIZATION_DEFAULTS.flowFieldStrength };
-    computeUniforms.uFlowFieldFrequency = { value: MATERIALIZATION_DEFAULTS.flowFieldFrequency };
-    computeUniforms.uAudioLevel = { value: 0 };
-    computeUniforms.uBass = { value: 0 };
-    computeUniforms.uMid = { value: 0 };
-    computeUniforms.uTreble = { value: 0 };
-    computeUniforms.uShaderEnabled = { value: 1 };
-    computeUniforms.uFlowEnabled = { value: 1 };
-    computeUniforms.uMidFlowTimeEnabled = { value: 0 };
-    computeUniforms.uMidFlowTimeStrength = { value: MATERIALIZATION_DEFAULTS.midFlowTimeStrength };
-    computeUniforms.uBassFlowInfluenceEnabled = { value: 0 };
-    computeUniforms.uBassFlowInfluenceStrength = { value: MATERIALIZATION_DEFAULTS.bassFlowInfluenceStrength };
-    computeUniforms.uTrebleFlowFrequencyEnabled = { value: 0 };
-    computeUniforms.uTrebleFlowFrequencyStrength = { value: MATERIALIZATION_DEFAULTS.trebleFlowFrequencyStrength };
-    computeUniforms.uAudioGateEnabled = { value: 0 };
-    computeUniforms.uAudioGateLow = { value: MATERIALIZATION_DEFAULTS.audioGateLow };
-    computeUniforms.uAudioGateHigh = { value: MATERIALIZATION_DEFAULTS.audioGateHigh };
-    computeUniforms.uAudioGateBassMix = { value: MATERIALIZATION_DEFAULTS.audioGateBassMix };
-    computeUniforms.uBassFlowStrengthEnabled = { value: 0 };
-    computeUniforms.uBassFlowStrength = { value: MATERIALIZATION_DEFAULTS.bassFlowStrength };
-    computeUniforms.uAudioFlowEnabled = { value: 0 };
-    computeUniforms.uAudioFlowStrength = { value: MATERIALIZATION_DEFAULTS.audioFlowStrength };
-    computeUniforms.uReturnEnabled = { value: 1 };
-    computeUniforms.uReturnStrength = { value: MATERIALIZATION_DEFAULTS.returnStrength };
-    const initError = this.gpgpu.init();
-    particlesTexture.dispose();
-    if (initError) {
-      this.gpgpu.dispose();
-      this.baseTexture.dispose();
-      throw new Error(initError);
-    }
-
-    const particleUvs = new Float32Array(count * 2);
-    const sizes = new Float32Array(count);
-    for (let index = 0; index < count; index += 1) {
-      particleUvs[index * 2] = (index % textureSize + 0.5) / textureSize;
-      particleUvs[index * 2 + 1] = (Math.floor(index / textureSize) + 0.5) / textureSize;
+      baseData[storageOffset + 3] = lifetime;
+      particleData[storageOffset + 3] = lifetime;
       sizes[index] = seededValue(index, 43);
     }
-    this.geometry.setDrawRange(0, count);
-    this.geometry.setAttribute("aParticlesUv", new THREE.BufferAttribute(particleUvs, 2));
-    this.geometry.setAttribute("aColor", new THREE.BufferAttribute(targetColors, 3));
-    this.geometry.setAttribute("aSize", new THREE.BufferAttribute(sizes, 1));
-    this.geometry.setAttribute("aSection", new THREE.BufferAttribute(targetSections, 1));
-    const dpr = clampDpr(context.dpr);
+
+    this.particles = instancedArray(particleData, "vec4").setName("MaterializationParticles");
+    this.base = instancedArray(baseData, "vec4").setName("MaterializationBase").toReadOnly();
+
+    this.computeNode = Fn(() => {
+      const particleElement = this.particles.element(instanceIndex);
+      const particle = vec4(particleElement).toVar();
+      const base = vec4(this.base.element(instanceIndex)).toVar();
+      const time = this.time.mul(0.2).add(
+        this.mid.mul(this.midFlowTimeStrength).mul(this.midFlowTimeEnabled).mul(this.shaderEnabled),
+      );
+      const noiseStrength = temporalNoise(base.xyz.mul(0.7), time.add(1));
+      const influence = this.flowFieldInfluence.sub(0.5).mul(-2).sub(
+        this.bass
+          .mul(this.bassFlowInfluenceStrength)
+          .mul(this.bassFlowInfluenceEnabled)
+          .mul(this.shaderEnabled),
+      );
+      const strength = smoothstep(influence, 1, noiseStrength);
+      const frequency = this.flowFieldFrequency.add(
+        this.treble
+          .mul(this.trebleFlowFrequencyStrength)
+          .mul(this.trebleFlowFrequencyEnabled)
+          .mul(this.shaderEnabled),
+      );
+      const flowPoint = particle.xyz.mul(frequency);
+      const flowField = normalize(vec3(
+        temporalNoise(flowPoint, time, 0),
+        temporalNoise(flowPoint, time, 1),
+        temporalNoise(flowPoint, time, 2),
+      ).add(vec3(1e-5)));
+
+      const audioInput = this.audioLevel.add(this.bass.mul(this.audioGateBassMix));
+      const audioActivity = mix(
+        1,
+        smoothstep(this.audioGateLow, this.audioGateHigh, audioInput),
+        this.audioGateEnabled,
+      );
+      const bassStrength = this.bass
+        .mul(this.bassFlowStrength)
+        .mul(this.bassFlowStrengthEnabled)
+        .mul(this.shaderEnabled);
+      const audioStrength = audioInput
+        .mul(this.audioFlowStrength)
+        .mul(this.audioFlowEnabled)
+        .mul(this.shaderEnabled);
+      const currentStrength = this.flowFieldStrength
+        .add(bassStrength)
+        .add(audioStrength)
+        .mul(audioActivity)
+        .mul(this.flowEnabled)
+        .mul(this.shaderEnabled);
+      particle.xyz.addAssign(flowField.mul(this.deltaTime).mul(strength).mul(currentStrength));
+      particle.xyz.addAssign(
+        base.xyz
+          .sub(particle.xyz)
+          .mul(this.deltaTime)
+          .mul(this.returnStrength)
+          .mul(this.returnEnabled)
+          .mul(this.shaderEnabled),
+      );
+      particleElement.assign(particle);
+    })().compute(count, [64]).setName("Materialization flow field");
+
     const pointSize = uploaded
       ? resolveMaterializationPointSize(uploaded.triangleCount, uploaded.meshCount)
       : MATERIALIZATION_DEFAULTS.size;
-    this.material = new THREE.ShaderMaterial({
-      vertexShader,
-      fragmentShader,
-      uniforms: {
-        ...THREE.UniformsLib.fog,
-        uSize: { value: pointSize },
-        uResolution: { value: new THREE.Vector2(context.width * dpr, context.height * dpr) },
-        uParticlesTexture: { value: this.gpgpu.getCurrentRenderTarget(this.particlesVariable).texture },
-        uMaterializedSectionCount: { value: 0 },
-        uAudioLevel: { value: 0 },
-        uBass: { value: 0 },
-        uMid: { value: 0 },
-        uTreble: { value: 0 },
-        uShaderEnabled: { value: 1 },
-        uBassRadialEnabled: { value: 0 },
-        uBassRadialPhase: { value: MATERIALIZATION_DEFAULTS.bassRadialPhase },
-        uBassRadialStrength: { value: MATERIALIZATION_DEFAULTS.bassRadialStrength },
-        uTrebleSizeEnabled: { value: 0 },
-        uTrebleSizeStrength: { value: MATERIALIZATION_DEFAULTS.trebleSizeStrength },
-      },
+    this.pointSize = uniform(pointSize);
+    const particle = this.particles.toAttribute();
+    const particleColor = instancedBufferAttribute<"vec3">(
+      new THREE.InstancedBufferAttribute(targetColors, 3),
+      "vec3",
+    );
+    const particleSize = instancedBufferAttribute<"float">(
+      new THREE.InstancedBufferAttribute(sizes, 1),
+      "float",
+    );
+    const particleSection = instancedBufferAttribute<"float">(
+      new THREE.InstancedBufferAttribute(targetSections, 1),
+      "float",
+    );
+    const distance = length(particle.xyz);
+    const direction = normalize(particle.xyz.add(vec3(1e-7)));
+    const radialStrength = sin(distance.mul(10).sub(this.bass.mul(this.bassRadialPhase)))
+      .mul(this.bass)
+      .mul(this.bassRadialStrength)
+      .mul(this.shaderEnabled)
+      .mul(this.bassRadialEnabled);
+    const displayPosition = particle.xyz.add(direction.mul(radialStrength));
+    const sectionVisible = particleSection.greaterThanEqual(this.materializedSectionCount);
+    const trebleScale = this.treble
+      .mul(this.trebleSizeStrength)
+      .mul(this.shaderEnabled)
+      .mul(this.trebleSizeEnabled)
+      .add(1);
+    const displaySize = mix(0.65, 1, particleSize)
+      .mul(this.pointSize)
+      .mul(trebleScale)
+      .mul(2);
+
+    this.material = new THREE.PointsNodeMaterial({
       transparent: true,
       depthWrite: true,
+      depthTest: true,
       side: THREE.DoubleSide,
       fog: true,
     });
-    this.points = new THREE.Points(this.geometry, this.material);
-    this.points.frustumCulled = false;
+    this.material.positionNode = displayPosition;
+    this.material.sizeNode = sectionVisible.select(displaySize, 0);
+    this.material.fragmentNode = sphereFragment(particleColor);
+    this.points = makeInstancedSprite(this.material, count);
     this.group.add(this.points);
+
     if (uploaded) {
       const sectionPositions: number[][] = [[], [], [], []];
       const sectionColors: number[][] = [[], [], [], []];
@@ -211,23 +343,30 @@ class MaterializationRuntime implements EffectInstance {
         );
       }
       sectionPositions.forEach((positions, index) => {
-        const geometry = new THREE.BufferGeometry();
-        geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
-        geometry.setAttribute("color", new THREE.Float32BufferAttribute(sectionColors[index], 3));
-        const material = new THREE.PointsMaterial({
-          size: pointSize * 0.64,
-          sizeAttenuation: true,
-          vertexColors: true,
-          fog: true,
+        const positionsArray = new Float32Array(positions);
+        const colorsArray = new Float32Array(sectionColors[index]);
+        const positionNode = instancedBufferAttribute<"vec3">(
+          new THREE.InstancedBufferAttribute(positionsArray, 3),
+          "vec3",
+        );
+        const colorNode = instancedBufferAttribute<"vec3">(
+          new THREE.InstancedBufferAttribute(colorsArray, 3),
+          "vec3",
+        );
+        const material = new THREE.PointsNodeMaterial({
           transparent: true,
-          opacity: 0.96,
           depthWrite: true,
+          depthTest: true,
+          fog: true,
         });
-        const points = new THREE.Points(geometry, material);
+        material.positionNode = positionNode;
+        material.sizeNode = uniform(pointSize * 0.64);
+        material.fragmentNode = vec4(colorNode, 0.96);
+        const points = makeInstancedSprite(material, positionsArray.length / 3);
         points.visible = false;
-        points.frustumCulled = false;
         this.sectionMeshes.push(points);
         this.sectionMaterials.push(material);
+        this.sectionGeometries.push(points.geometry);
         this.group.add(points);
       });
     } else {
@@ -246,6 +385,7 @@ class MaterializationRuntime implements EffectInstance {
         mesh.visible = false;
         this.sectionMeshes.push(mesh);
         this.sectionMaterials.push(material);
+        this.sectionGeometries.push(geometry);
         this.group.add(mesh);
       });
     }
@@ -256,7 +396,7 @@ class MaterializationRuntime implements EffectInstance {
 
   private setMaterializedSectionCount(count: number): void {
     const safeCount = THREE.MathUtils.clamp(Math.floor(count), 0, SECTION_COUNT);
-    this.material.uniforms.uMaterializedSectionCount.value = safeCount;
+    this.materializedSectionCount.value = safeCount;
     this.sectionMeshes.forEach((mesh, index) => { mesh.visible = index < safeCount; });
   }
 
@@ -274,21 +414,18 @@ class MaterializationRuntime implements EffectInstance {
     }
     const shaderTime = this.reducedMotion ? 0 : frame.elapsed;
     const delta = this.reducedMotion ? 0 : Math.min(Math.max(frame.delta, 0), 0.05);
-    const computeUniforms = this.particlesVariable.material.uniforms;
-    computeUniforms.uTime.value = shaderTime;
-    computeUniforms.uDeltaTime.value = delta;
-    if (delta > 0 && computeUniforms.uShaderEnabled.value > 0) this.gpgpu.compute();
-    this.material.uniforms.uParticlesTexture.value = this.gpgpu.getCurrentRenderTarget(this.particlesVariable).texture;
+    this.time.value = shaderTime;
+    this.deltaTime.value = delta;
+    if (delta > 0 && this.shaderEnabled.value > 0) this.renderer.compute(this.computeNode);
     this.group.rotation.y = shaderTime * 0.1;
     this.group.rotation.x = Math.sin(shaderTime * 0.23) * 0.08;
   }
 
   resize(width: number, height: number, dpr: number): void {
+    clampDpr(dpr);
     const safeHeight = Math.max(1, height);
     this.camera.aspect = Math.max(1, width) / safeHeight;
     this.camera.updateProjectionMatrix();
-    const safeDpr = clampDpr(dpr);
-    this.material.uniforms.uResolution.value.set(Math.max(1, width) * safeDpr, safeHeight * safeDpr);
   }
 
   setPreset(preset: string): void {
@@ -296,25 +433,23 @@ class MaterializationRuntime implements EffectInstance {
     this.currentPreset = preset as (typeof PRESETS)[number];
     this.presetStartedAt = this.lastElapsed;
     this.presetStartPending = true;
-    const computeUniforms = this.particlesVariable.material.uniforms;
     const enabled = preset === "dormant" ? 0 : 1;
-    computeUniforms.uShaderEnabled.value = enabled;
-    computeUniforms.uFlowEnabled.value = enabled;
-    this.material.uniforms.uShaderEnabled.value = enabled;
-    computeUniforms.uFlowFieldStrength.value = preset === "pulse" ? 3.15 : MATERIALIZATION_DEFAULTS.flowFieldStrength;
+    this.shaderEnabled.value = enabled;
+    this.flowEnabled.value = enabled;
+    this.flowFieldStrength.value = preset === "pulse" ? 3.15 : MATERIALIZATION_DEFAULTS.flowFieldStrength;
     if (preset === "dissolve") this.setMaterializedSectionCount(SECTION_COUNT);
     else this.setMaterializedSectionCount(0);
   }
 
   dispose(): void {
     this.scene.remove(this.group);
-    this.geometry.dispose();
+    this.computeNode.dispose();
+    disposeComputeOnlyStorage(this.renderer, this.base);
+    this.points.geometry.dispose();
+    this.sectionGeometries.forEach((geometry) => geometry.dispose());
     this.material.dispose();
-    this.sectionMeshes.forEach((mesh) => mesh.geometry.dispose());
     this.sectionMaterials.forEach((material) => material.dispose());
     this.group.clear();
-    this.gpgpu.dispose();
-    this.baseTexture.dispose();
     this.scene.clear();
   }
 }

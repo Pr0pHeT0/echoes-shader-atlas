@@ -60,8 +60,8 @@ export function HomeGallery() {
               <h2>{selected.name}</h2>
             </div>
             <p className="hero-summary">
-              Explore five live WebGL2 studies with readable GLSL source, interactive controls,
-              implementation notes, and MIT-licensed project code. Now viewing: {selected.summary}
+              Five live WebGPU studies with automatic WebGL2 fallback, readable GLSL, and interactive
+              controls. Now viewing: {selected.summary}
             </p>
             <div className="hero-actions">
               <a

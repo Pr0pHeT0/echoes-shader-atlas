@@ -1,4 +1,5 @@
 import type * as THREE from "three";
+import type { WebGPURenderer } from "three/webgpu";
 
 export const EFFECT_IDS = [
   "aurora-field",
@@ -44,7 +45,7 @@ export interface EffectFrame {
 
 export interface EffectRuntimeContext {
   /** One renderer is owned by ShaderStage and shared across effect instances. */
-  renderer: THREE.WebGLRenderer;
+  renderer: WebGPURenderer;
   width: number;
   height: number;
   /** Device-pixel ratio, already capped by ShaderStage. Runtimes cap it again at 1.5. */

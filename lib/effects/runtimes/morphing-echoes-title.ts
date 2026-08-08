@@ -1,8 +1,27 @@
-import * as THREE from "three";
+import * as THREE from "three/webgpu";
+import {
+  attribute,
+  clamp,
+  cos,
+  floor,
+  fract,
+  max,
+  min,
+  mix,
+  modelViewMatrix,
+  mx_noise_float,
+  normalize,
+  screenDPR,
+  sin,
+  smoothstep,
+  uniform,
+  uv,
+  varying,
+  vec2,
+  vec3,
+  vec4,
+} from "three/tsl";
 
-import fragmentSource from "../../shaders/title/title-particles.frag.glsl?raw";
-import vertexSource from "../../shaders/title/title-particles.vert.glsl?raw";
-import { composeShader } from "../../shaders/compose";
 import { loadFontFacesWithFallback } from "../font-loading";
 import { seededValue } from "../geometry";
 import { EFFECT_PRESETS, TITLE_UNIFORM_DEFAULTS } from "../runtime-config";
@@ -191,11 +210,21 @@ class MorphingTitleRuntime implements EffectInstance {
   readonly presets = PRESETS;
   readonly scene: THREE.Scene;
   readonly camera: THREE.PerspectiveCamera;
-  private readonly geometry = new THREE.BufferGeometry();
-  private readonly material: THREE.ShaderMaterial;
-  private readonly points: THREE.Points;
+  private readonly geometry = new THREE.InstancedBufferGeometry();
+  private readonly material: THREE.PointsNodeMaterial;
+  private readonly points: THREE.Sprite;
   private readonly group = new THREE.Group();
   private readonly reducedMotion: boolean;
+  private readonly timeNode = uniform(TITLE_UNIFORM_DEFAULTS.uTime).setName("uTime");
+  private readonly revealNode = uniform(TITLE_UNIFORM_DEFAULTS.uReveal).setName("uReveal");
+  private readonly pixelRatioNode = uniform(1).setName("uPixelRatio");
+  private readonly fontPhaseNode = uniform(TITLE_UNIFORM_DEFAULTS.uFontPhase).setName("uFontPhase");
+  private readonly pointerNode = uniform(new THREE.Vector2(100, 100)).setName("uPointer");
+  private readonly pointerEnergyNode = uniform(TITLE_UNIFORM_DEFAULTS.uPointerEnergy).setName("uPointerEnergy");
+  private readonly explosionNode = uniform(TITLE_UNIFORM_DEFAULTS.uExplosion).setName("uExplosion");
+  private readonly orbNode = uniform(TITLE_UNIFORM_DEFAULTS.uOrb).setName("uOrb");
+  private readonly orbOpacityNode = uniform(TITLE_UNIFORM_DEFAULTS.uOrbOpacity).setName("uOrbOpacity");
+  private readonly icosahedronNode = uniform(TITLE_UNIFORM_DEFAULTS.uIcosahedron).setName("uIcosahedron");
   private reveal = 0;
   private currentPreset: (typeof PRESETS)[number] = "wordmark";
   private lastElapsed = 0;
@@ -210,36 +239,259 @@ class MorphingTitleRuntime implements EffectInstance {
   constructor(context: EffectRuntimeContext, data: TextParticleData) {
     ({ scene: this.scene, camera: this.camera } = makeShowcaseScene(context.width, context.height));
     this.reducedMotion = context.reducedMotion;
-    this.geometry.setAttribute("position", new THREE.BufferAttribute(data.positions, 3));
-    this.geometry.setAttribute("aFontPositionTektur", new THREE.BufferAttribute(data.targets[0], 3));
-    this.geometry.setAttribute("aFontPositionBruno", new THREE.BufferAttribute(data.targets[1], 3));
-    this.geometry.setAttribute("aFontPositionChakra", new THREE.BufferAttribute(data.targets[2], 3));
-    this.geometry.setAttribute("aFontPositionOrbitron", new THREE.BufferAttribute(data.targets[3], 3));
-    this.geometry.setAttribute("aOrbPosition", new THREE.BufferAttribute(data.orbPositions, 3));
-    this.geometry.setAttribute("aIcosahedronPosition", new THREE.BufferAttribute(data.icosahedronPositions, 3));
-    this.geometry.setAttribute("aSeed", new THREE.BufferAttribute(data.seeds, 1));
-    this.geometry.setAttribute("aLayer", new THREE.BufferAttribute(data.layers, 1));
-    this.geometry.setAttribute("aWorldsMask", new THREE.BufferAttribute(data.worldsMask, 1));
-    this.material = new THREE.ShaderMaterial({
-      vertexShader: composeShader(vertexSource),
-      fragmentShader: fragmentSource,
-      uniforms: {
-        uTime: { value: TITLE_UNIFORM_DEFAULTS.uTime },
-        uReveal: { value: TITLE_UNIFORM_DEFAULTS.uReveal },
-        uPixelRatio: { value: clampDpr(context.dpr) },
-        uFontPhase: { value: TITLE_UNIFORM_DEFAULTS.uFontPhase },
-        uPointer: { value: new THREE.Vector2(100, 100) },
-        uPointerEnergy: { value: TITLE_UNIFORM_DEFAULTS.uPointerEnergy },
-        uExplosion: { value: TITLE_UNIFORM_DEFAULTS.uExplosion },
-        uOrb: { value: TITLE_UNIFORM_DEFAULTS.uOrb },
-        uOrbOpacity: { value: TITLE_UNIFORM_DEFAULTS.uOrbOpacity },
-        uIcosahedron: { value: TITLE_UNIFORM_DEFAULTS.uIcosahedron },
-      },
+    const count = data.positions.length / 3;
+
+    // WebGPU point primitives are fixed at one pixel, so use PointsNodeMaterial's
+    // instanced-sprite path to retain the original depth-scaled particle sizes.
+    this.geometry.setIndex([0, 1, 2, 0, 2, 3]);
+    this.geometry.setAttribute("position", new THREE.Float32BufferAttribute([
+      -0.5, -0.5, 0,
+      0.5, -0.5, 0,
+      0.5, 0.5, 0,
+      -0.5, 0.5, 0,
+    ], 3));
+    this.geometry.setAttribute("uv", new THREE.Float32BufferAttribute([
+      0, 0,
+      1, 0,
+      1, 1,
+      0, 1,
+    ], 2));
+    // Keep the ten particle attributes in one vertex buffer. WebGPU guarantees
+    // only eight vertex-buffer slots, while interleaved attributes retain the
+    // same shader-facing names and values without consuming a slot apiece.
+    const particleStride = 24;
+    const particleData = new Float32Array(count * particleStride);
+    for (let index = 0; index < count; index += 1) {
+      const sourceOffset = index * 3;
+      const targetOffset = index * particleStride;
+      particleData.set(data.positions.subarray(sourceOffset, sourceOffset + 3), targetOffset);
+      particleData.set(data.targets[0].subarray(sourceOffset, sourceOffset + 3), targetOffset + 3);
+      particleData.set(data.targets[1].subarray(sourceOffset, sourceOffset + 3), targetOffset + 6);
+      particleData.set(data.targets[2].subarray(sourceOffset, sourceOffset + 3), targetOffset + 9);
+      particleData.set(data.targets[3].subarray(sourceOffset, sourceOffset + 3), targetOffset + 12);
+      particleData.set(data.orbPositions.subarray(sourceOffset, sourceOffset + 3), targetOffset + 15);
+      particleData.set(data.icosahedronPositions.subarray(sourceOffset, sourceOffset + 3), targetOffset + 18);
+      particleData[targetOffset + 21] = data.seeds[index];
+      particleData[targetOffset + 22] = data.layers[index];
+      particleData[targetOffset + 23] = data.worldsMask[index];
+    }
+    const particleBuffer = new THREE.InstancedInterleavedBuffer(particleData, particleStride);
+    this.geometry.setAttribute("aTitlePosition", new THREE.InterleavedBufferAttribute(particleBuffer, 3, 0));
+    this.geometry.setAttribute("aFontPositionTektur", new THREE.InterleavedBufferAttribute(particleBuffer, 3, 3));
+    this.geometry.setAttribute("aFontPositionBruno", new THREE.InterleavedBufferAttribute(particleBuffer, 3, 6));
+    this.geometry.setAttribute("aFontPositionChakra", new THREE.InterleavedBufferAttribute(particleBuffer, 3, 9));
+    this.geometry.setAttribute("aFontPositionOrbitron", new THREE.InterleavedBufferAttribute(particleBuffer, 3, 12));
+    this.geometry.setAttribute("aOrbPosition", new THREE.InterleavedBufferAttribute(particleBuffer, 3, 15));
+    this.geometry.setAttribute("aIcosahedronPosition", new THREE.InterleavedBufferAttribute(particleBuffer, 3, 18));
+    this.geometry.setAttribute("aSeed", new THREE.InterleavedBufferAttribute(particleBuffer, 1, 21));
+    this.geometry.setAttribute("aLayer", new THREE.InterleavedBufferAttribute(particleBuffer, 1, 22));
+    this.geometry.setAttribute("aWorldsMask", new THREE.InterleavedBufferAttribute(particleBuffer, 1, 23));
+    this.geometry.instanceCount = count;
+
+    const titlePositionAttribute = attribute<"vec3">("aTitlePosition", "vec3");
+    const fontPositionTektur = attribute<"vec3">("aFontPositionTektur", "vec3");
+    const fontPositionBruno = attribute<"vec3">("aFontPositionBruno", "vec3");
+    const fontPositionChakra = attribute<"vec3">("aFontPositionChakra", "vec3");
+    const fontPositionOrbitron = attribute<"vec3">("aFontPositionOrbitron", "vec3");
+    const orbPosition = attribute<"vec3">("aOrbPosition", "vec3");
+    const icosahedronPosition = attribute<"vec3">("aIcosahedronPosition", "vec3");
+    const seed = attribute<"float">("aSeed", "float");
+    const layer = attribute<"float">("aLayer", "float");
+    const worldsMask = attribute<"float">("aWorldsMask", "float");
+
+    const fontSegment = floor(this.fontPhaseNode);
+    const globalFontBlend = fract(this.fontPhaseNode);
+    const worldsProgress = clamp(titlePositionAttribute.x.add(0.85).div(4.65), 0, 1);
+    const fontDelay = worldsProgress.mul(0.22).add(seed.mul(0.1)).mul(worldsMask);
+    const fontBlend = smoothstep(0, 1, clamp(globalFontBlend.sub(fontDelay).div(0.68), 0, 1));
+    const fontFrom = fontSegment.lessThan(0.5).select(
+      titlePositionAttribute,
+      fontSegment.lessThan(1.5).select(
+        fontPositionTektur,
+        fontSegment.lessThan(2.5).select(
+          fontPositionBruno,
+          fontSegment.lessThan(3.5).select(fontPositionChakra, fontPositionOrbitron),
+        ),
+      ),
+    );
+    const fontTo = fontSegment.lessThan(0.5).select(
+      fontPositionTektur,
+      fontSegment.lessThan(1.5).select(
+        fontPositionBruno,
+        fontSegment.lessThan(2.5).select(
+          fontPositionChakra,
+          fontSegment.lessThan(3.5).select(fontPositionOrbitron, titlePositionAttribute),
+        ),
+      ),
+    );
+    const fontTransformPulse = sin(fontBlend.mul(Math.PI)).mul(worldsMask);
+    const peelAngle = seed.mul(Math.PI * 6).add(fontBlend.mul(Math.PI));
+    const titlePosition = mix(fontFrom, fontTo, fontBlend).add(vec3(
+      cos(peelAngle).mul(fontTransformPulse).mul(0.075),
+      sin(peelAngle).mul(fontTransformPulse).mul(0.105),
+      seed.mul(0.62).add(0.2).mul(fontTransformPulse),
+    ));
+
+    // MaterialX noise is backend-independent TSL, with time folded into the
+    // coordinates to retain the original animated 4D-flow character.
+    const titleNoise = mx_noise_float(vec3(
+      titlePosition.x.mul(0.72).add(this.timeNode.mul(0.11)),
+      titlePosition.y.mul(0.72).sub(this.timeNode.mul(0.07)),
+      titlePosition.z.mul(2.4).add(seed).add(this.timeNode.mul(0.16)),
+    ));
+    const ribbon = sin(titlePosition.x.mul(1.85).sub(this.timeNode.mul(0.72)).add(seed.mul(4)));
+    const flowingTitlePosition = titlePosition.add(vec3(
+      titleNoise.mul(0.045),
+      sin(this.timeNode.mul(0.85).add(seed.mul(13)).add(titlePosition.x.mul(1.3))).mul(0.028),
+      titleNoise.mul(0.055).add(ribbon.mul(0.025)),
+    ));
+
+    const pointerDelta = titlePosition.xy.sub(this.pointerNode);
+    const pointerDistance = pointerDelta.length();
+    const pointerDirection = pointerDelta.div(max(pointerDistance, 0.001));
+    const pointerField = smoothstep(0.18, 1.55, pointerDistance).oneMinus();
+    const jiggle = sin(this.timeNode.mul(19).add(seed.mul(37)).add(titlePosition.x.mul(4.5)));
+    const jiggleStrength = pointerField.mul(this.pointerEnergyNode);
+    const pointerPosition = flowingTitlePosition.add(vec3(
+      pointerDirection.x.mul(jiggle).mul(jiggleStrength).mul(0.105),
+      pointerDirection.y.mul(jiggle).mul(jiggleStrength).mul(0.105)
+        .add(cos(this.timeNode.mul(23).add(seed.mul(29))).mul(jiggleStrength).mul(0.052)),
+      jiggle.mul(jiggleStrength).mul(0.12),
+    ));
+
+    const explosionEase = this.explosionNode.oneMinus().pow(3).oneMinus();
+    const explosionAngle = seed.mul(Math.PI * 2).add(titlePosition.x.mul(0.34)).add(layer.mul(1.7));
+    const explosionDirection = normalize(vec2(
+      cos(explosionAngle).add(titlePosition.x.mul(0.12)),
+      sin(explosionAngle).add(titlePosition.y.mul(0.42)),
+    ));
+    const explosionDistance = mix(1.6, 7.2, fract(seed.mul(17.73).add(layer.mul(0.31))));
+    const explodedPosition = pointerPosition.add(vec3(
+      explosionDirection.mul(explosionDistance).mul(explosionEase),
+      seed.sub(0.5).mul(5).mul(explosionEase),
+    ));
+
+    const scatter = this.revealNode.oneMinus();
+    const scatteredPosition = explodedPosition.add(vec3(
+      cos(seed.mul(31)).mul(scatter).mul(layer.mul(1.8).add(0.4)),
+      sin(seed.mul(47)).mul(scatter).mul(layer.mul(1.2).add(0.25)),
+      seed.sub(0.5).mul(scatter).mul(4),
+    ));
+
+    const orbEase = this.orbNode.mul(this.orbNode).mul(this.orbNode.mul(2).oneMinus().add(2));
+    const orbLifetime = fract(seed.add(this.timeNode.mul(0.12)));
+    const orbLifeIn = smoothstep(0, 0.22, orbLifetime);
+    const orbLifeOut = smoothstep(0.68, 1, orbLifetime).oneMinus();
+    const orbLifeEnvelope = min(orbLifeIn, orbLifeOut);
+    const activeOrbShape = mix(orbPosition, icosahedronPosition, this.icosahedronNode);
+    const orbNormal = normalize(activeOrbShape.add(vec3(0.0001)));
+    const orbBreath = sin(this.timeNode.mul(1.1).add(seed.mul(10))).mul(0.018);
+    const orbRipple = mx_noise_float(activeOrbShape.mul(1.8).add(vec3(
+      this.timeNode.mul(0.12),
+      this.timeNode.mul(-0.09),
+      this.timeNode.mul(0.18),
+    ))).mul(0.024);
+    const orbFlowTime = this.timeNode.mul(0.1);
+    const orbFlowSample = activeOrbShape.mul(0.72);
+    const orbFlow = vec3(
+      mx_noise_float(orbFlowSample.add(vec3(0, 0, orbFlowTime))),
+      mx_noise_float(orbFlowSample.add(vec3(1, 1, orbFlowTime.add(1)))),
+      mx_noise_float(orbFlowSample.add(vec3(2, 2, orbFlowTime.add(2)))),
+    );
+    const orbFlowMask = smoothstep(
+      -0.2,
+      0.8,
+      mx_noise_float(activeOrbShape.mul(0.9).add(vec3(0, 0, orbFlowTime.add(1)))),
+    );
+    const orbFlowDirection = normalize(orbFlow.add(vec3(0.0001)));
+    const breathingOrb = activeOrbShape.mul(orbBreath.add(orbRipple).add(1))
+      .add(orbFlowDirection.mul(orbFlowMask).mul(orbLifeEnvelope).mul(0.13))
+      .add(orbNormal.mul(sin(orbLifetime.mul(Math.PI * 2))).mul(orbLifeEnvelope).mul(0.022));
+    const transformed = mix(scatteredPosition, breathingOrb, orbEase);
+
+    const viewPosition = modelViewMatrix.mul(vec4(transformed, 1));
+    const depthScale = max(1, viewPosition.z.negate()).reciprocal().mul(9);
+    const titlePointSize = mix(1.25, 2.5, seed)
+      .mul(depthScale)
+      .mul(this.explosionNode.mul(1.7).add(1));
+    const orbLifeSize = mix(0.48, 1, orbLifeEnvelope);
+    const orbPointSize = mix(1.5, 3.1, seed).mul(depthScale).mul(orbLifeSize);
+    const fontPointScale = fontTransformPulse.mul(0.42).oneMinus();
+    const pointSize = mix(titlePointSize, orbPointSize, orbEase)
+      .mul(mix(1, 1.22, orbEase))
+      .mul(mix(fontPointScale, 1, orbEase));
+
+    const cyan = vec3(0.12, 0.86, 1);
+    const pearl = vec3(0.92, 0.98, 1);
+    const violet = vec3(0.5, 0.36, 1);
+    const titleColor = mix(cyan, pearl, 0.38).mul(titleNoise.mul(0.04).add(0.96));
+    const orbAccent = mix(cyan, violet, smoothstep(-0.82, 0.82, orbPosition.x));
+    const orbSilver = mix(vec3(0.25, 0.3, 0.32), pearl, seed.mul(0.1).add(0.15));
+    const orbColor = mix(
+      mix(orbAccent, orbSilver, 0.88),
+      mix(cyan, violet, seed.mul(0.24).add(0.42)),
+      this.icosahedronNode.mul(0.55),
+    );
+    const particleColor = varying(mix(titleColor, orbColor, orbEase), "vTitleColor");
+    const explosionFade = mix(1, 0.08, smoothstep(0.58, 1, this.explosionNode));
+    const shapeOpacity = mix(explosionFade, 0.82, orbEase);
+    const orbLifeAlpha = mix(0.46, 1, orbLifeEnvelope);
+    const particleAlpha = varying(
+      mix(0.42, 1, layer.oneMinus())
+        .mul(this.revealNode)
+        .mul(shapeOpacity)
+        .mul(this.orbOpacityNode)
+        .mul(mix(1, orbLifeAlpha, orbEase)),
+      "vTitleAlpha",
+    );
+    const baseLight = sin(this.timeNode.mul(1.4).add(seed.mul(19))).mul(0.12).add(0.88);
+    const orbShimmer = sin(
+      this.timeNode.mul(2.1).add(seed.mul(31)).add(orbLifetime.mul(Math.PI * 2)),
+    ).mul(0.22).add(0.78);
+    const particleLight = varying(mix(baseLight, orbShimmer, orbEase), "vTitleLight");
+    const particleOrb = varying(orbEase, "vTitleOrb");
+
+    const point = uv().mul(2).sub(1);
+    const radiusSquared = point.dot(point);
+    const radius = radiusSquared.sqrt();
+    const orbCoreRadius = mix(1, 0.72, particleOrb);
+    const surfacePoint = point.div(orbCoreRadius);
+    const surfaceRadiusSquared = min(surfacePoint.dot(surfacePoint), 1);
+    const sphere = surfaceRadiusSquared.oneMinus().sqrt();
+    const titleCore = smoothstep(0.05, 1, radiusSquared).oneMinus();
+    const orbCore = smoothstep(orbCoreRadius.mul(0.82), orbCoreRadius, radius).oneMinus();
+    const core = mix(titleCore, orbCore, particleOrb);
+    const normal = normalize(vec3(surfacePoint, sphere));
+    const lightDirection = normalize(vec3(-0.35, 0.7, 1));
+    const diffuse = max(normal.dot(lightDirection), 0).mul(0.58).add(0.42);
+    const halfDirection = normalize(lightDirection.add(vec3(0, 0, 1)));
+    const glint = max(normal.dot(halfDirection), 0).pow(22);
+    const halo = smoothstep(orbCoreRadius.mul(0.7), 1, radius).oneMinus().mul(particleOrb);
+    const outputColor = particleColor.mul(diffuse).mul(particleLight)
+      .add(vec3(0.65, 0.9, 1).mul(glint).mul(0.5))
+      .add(vec3(0.12, 0.62, 1).mul(halo).mul(0.18));
+    const surfaceAlpha = core.mul(0.68).add(0.32)
+      .mul(particleAlpha)
+      .mul(mix(1, orbCore, particleOrb));
+    const outputAlpha = surfaceAlpha.add(halo.mul(particleAlpha).mul(0.11));
+
+    this.pixelRatioNode.value = clampDpr(context.dpr);
+    this.material = new THREE.PointsNodeMaterial({
       transparent: true,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
+      sizeAttenuation: false,
     });
-    this.points = new THREE.Points(this.geometry, this.material);
+    this.material.positionNode = transformed;
+    // PointsNodeMaterial applies the renderer DPR internally. This ratio keeps
+    // the explicit clamped-DPR contract of the archived GLSL shader.
+    this.material.sizeNode = vec2(pointSize.mul(this.pixelRatioNode).div(max(screenDPR, 0.001)));
+    this.material.maskNode = radiusSquared.lessThanEqual(1);
+    this.material.colorNode = vec4(outputColor, outputAlpha);
+
+    this.points = new THREE.Sprite(this.material);
+    this.points.geometry = this.geometry;
+    this.points.count = count;
     this.points.frustumCulled = false;
     this.group.add(this.points);
     this.scene.add(this.group);
@@ -255,13 +507,13 @@ class MorphingTitleRuntime implements EffectInstance {
       ? 1
       : Math.min(1, this.reveal + delta * 0.72);
     const shaderTime = this.reducedMotion ? 0 : frame.elapsed;
-    this.material.uniforms.uTime.value = shaderTime;
-    this.material.uniforms.uReveal.value = 1 - Math.pow(1 - this.reveal, 3);
-    this.material.uniforms.uFontPhase.value = this.reducedMotion ? 0 : fontPhaseAt(frame.elapsed);
+    this.timeNode.value = shaderTime;
+    this.revealNode.value = 1 - Math.pow(1 - this.reveal, 3);
+    this.fontPhaseNode.value = this.reducedMotion ? 0 : fontPhaseAt(frame.elapsed);
 
     if (this.currentPreset === "burst") {
       const progress = this.reducedMotion ? 0.72 : Math.min(1, (frame.elapsed - this.presetStartedAt) * 0.82);
-      this.material.uniforms.uExplosion.value = progress;
+      this.explosionNode.value = progress;
     }
     if (frame.pointer && this.currentPreset === "wordmark" && !this.reducedMotion) {
       const pointer = new THREE.Vector2(frame.pointer.x, frame.pointer.y);
@@ -271,14 +523,14 @@ class MorphingTitleRuntime implements EffectInstance {
       this.pointerEnergy = Math.max(impulse, this.pointerEnergy * Math.exp(-delta * 3.8));
       this.previousPointer.copy(pointer);
       this.hasPointer = true;
-      this.material.uniforms.uPointer.value.set(
+      this.pointerNode.value.set(
         pointer.x * this.frustumWidth * 0.5 / Math.max(0.001, this.group.scale.x),
         pointer.y * this.frustumHeight * 0.5 / Math.max(0.001, this.group.scale.y),
       );
-      this.material.uniforms.uPointerEnergy.value = this.pointerEnergy;
+      this.pointerEnergyNode.value = this.pointerEnergy;
     } else {
       this.pointerEnergy *= Math.exp(-delta * 3.8);
-      this.material.uniforms.uPointerEnergy.value = this.pointerEnergy;
+      this.pointerEnergyNode.value = this.pointerEnergy;
     }
     const orb = this.currentPreset === "orb" || this.currentPreset === "icosahedron" ? 1 : 0;
     this.group.rotation.y = Math.sin(shaderTime * 0.25) * 0.006 + orb * shaderTime * 0.085;
@@ -297,7 +549,7 @@ class MorphingTitleRuntime implements EffectInstance {
     this.viewportHeight = safeHeight;
     const availableWidth = this.frustumWidth * 0.9;
     this.group.scale.setScalar(Math.min(1, availableWidth / WORLD_WIDTH));
-    this.material.uniforms.uPixelRatio.value = clampDpr(dpr);
+    this.pixelRatioNode.value = clampDpr(dpr);
   }
 
   setPreset(preset: string): void {
@@ -305,10 +557,10 @@ class MorphingTitleRuntime implements EffectInstance {
     this.currentPreset = preset as (typeof PRESETS)[number];
     this.presetStartedAt = this.lastElapsed;
     const isOrb = preset === "orb" || preset === "icosahedron";
-    this.material.uniforms.uOrb.value = isOrb ? 1 : 0;
-    this.material.uniforms.uIcosahedron.value = preset === "icosahedron" ? 1 : 0;
-    this.material.uniforms.uExplosion.value = 0;
-    this.material.uniforms.uOrbOpacity.value = 1;
+    this.orbNode.value = isOrb ? 1 : 0;
+    this.icosahedronNode.value = preset === "icosahedron" ? 1 : 0;
+    this.explosionNode.value = 0;
+    this.orbOpacityNode.value = 1;
     this.material.blending = isOrb ? THREE.NormalBlending : THREE.AdditiveBlending;
     this.material.depthWrite = isOrb;
     this.material.needsUpdate = true;

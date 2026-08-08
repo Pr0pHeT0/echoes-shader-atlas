@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { WebGLRenderer } from "three";
+import type { WebGPURenderer } from "three/webgpu";
 import { createEffectRuntime } from "@/lib/effects/runtime-registry";
 import { ShaderStageController } from "@/lib/effects/stage-controller";
 import type { StageEnvironment, StageQuality } from "@/lib/effects/stage-controller";
@@ -9,12 +9,14 @@ import type { AudioMetrics, EffectId, MaterializationPointCloud } from "@/lib/ef
 
 export type ShaderStageAudio = AudioMetrics;
 export type ShaderStageQuality = StageQuality;
+export type ShaderStageRenderer = "webgpu" | "webgl2";
 
 type ShaderStageProps = {
   effectId: EffectId;
   preset?: string;
   paused?: boolean;
   quality?: ShaderStageQuality;
+  rendererMode?: ShaderStageRenderer;
   syntheticAudio?: boolean;
   audio?: ShaderStageAudio;
   pointCloud?: MaterializationPointCloud | null;
@@ -47,6 +49,7 @@ export function ShaderStage({
   preset,
   paused = false,
   quality = "auto",
+  rendererMode,
   syntheticAudio = false,
   audio = ZERO_AUDIO,
   pointCloud = null,
@@ -75,9 +78,12 @@ export function ShaderStage({
     // creating a GPU context. The shader remains the hero, but no longer
     // blocks the page's first useful render on constrained devices.
     const prepareTimer = window.setTimeout(() => {
-      void import("three").then((THREE) => {
+      void import("three/webgpu").then((THREE) => {
         if (cancelled) return;
         const initial = latestPropsRef.current;
+        const forceWebGL = rendererMode === "webgl2"
+          || (rendererMode === undefined
+            && new URLSearchParams(window.location.search).get("renderer") === "webgl2");
         mountedEffectRef.current = initial.effectId;
         const controller = new ShaderStageController({
           effectId: initial.effectId,
@@ -90,12 +96,13 @@ export function ShaderStage({
           syntheticAudio: initial.syntheticAudio,
           audio: initial.audio,
           pointCloud: initial.pointCloud,
-          createRenderer: (stageCanvas, context, stageQuality) => {
-            const renderer = new THREE.WebGLRenderer({
+          createRenderer: (stageCanvas, stageQuality) => {
+            const renderer = new THREE.WebGPURenderer({
               canvas: stageCanvas as HTMLCanvasElement,
-              context: context as WebGL2RenderingContext,
               antialias: stageQuality !== "low",
               alpha: false,
+              depth: true,
+              forceWebGL,
               powerPreference: "high-performance",
             });
             renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -104,7 +111,7 @@ export function ShaderStage({
           },
           createEffect: (id, context) => createEffectRuntime(id, {
             ...context,
-            renderer: context.renderer as WebGLRenderer,
+            renderer: context.renderer as WebGPURenderer,
           }),
           onStatus: (status) => {
             setLoading(status.loading);
@@ -117,7 +124,7 @@ export function ShaderStage({
       }).catch(() => {
         if (!cancelled) {
           setLoading(false);
-          setFailure("The WebGL runtime could not be loaded in this browser.");
+          setFailure("The WebGPU/WebGL2 runtime could not be loaded in this browser.");
         }
       });
     }, 300);
@@ -128,7 +135,7 @@ export function ShaderStage({
       controllerRef.current = null;
       activeController?.dispose();
     };
-  }, [quality]);
+  }, [quality, rendererMode]);
 
   useEffect(() => {
     const controller = controllerRef.current;

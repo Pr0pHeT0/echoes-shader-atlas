@@ -9,11 +9,19 @@ import type {
 
 export type StageQuality = "low" | "auto" | "high";
 
+export interface StageDeviceLostInfo {
+  api: "WebGL" | "WebGPU";
+  message: string;
+  reason: string | null;
+  originalEvent: unknown;
+}
+
 export interface StageRenderer {
+  init(): Promise<unknown>;
   render(scene: EffectInstance["scene"], camera: EffectInstance["camera"]): void;
   setPixelRatio(dpr: number): void;
   setSize(width: number, height: number, updateStyle: boolean): void;
-  readonly renderLists: { dispose(): void };
+  onDeviceLost?: (info: StageDeviceLostInfo) => void;
   dispose(): void;
 }
 
@@ -22,7 +30,6 @@ export interface StageHost {
 }
 
 export interface StageCanvas {
-  getContext(contextId: "webgl2", options: WebGLContextAttributes): unknown;
   addEventListener(type: string, listener: EventListener): void;
   removeEventListener(type: string, listener: EventListener): void;
 }
@@ -67,7 +74,7 @@ export interface StageControllerOptions {
   host: StageHost;
   canvas: StageCanvas;
   environment: StageEnvironment;
-  createRenderer(canvas: StageCanvas, context: unknown, quality: StageQuality): StageRenderer;
+  createRenderer(canvas: StageCanvas, quality: StageQuality): StageRenderer | Promise<StageRenderer>;
   createEffect(effectId: EffectId, context: StageRuntimeContext): Promise<EffectInstance>;
   onStatus(status: StageStatus): void;
   preset?: string;
@@ -113,7 +120,10 @@ export class ShaderStageController {
   private generation = 0;
   private mounted = false;
   private disposed = false;
-  private contextLost = false;
+  private deviceLost = false;
+  private rebuildingRenderer = false;
+  private rendererRebuildRequested = false;
+  private rendererGeneration = 0;
   private previousFrameTime = 0;
   private activeElapsed = 0;
   private effectId: EffectId;
@@ -140,29 +150,8 @@ export class ShaderStageController {
   async mount(): Promise<boolean> {
     if (this.mounted || this.disposed) return false;
     this.mounted = true;
-    const context = this.options.canvas.getContext("webgl2", {
-      alpha: false,
-      antialias: this.options.quality !== "low",
-      depth: true,
-      powerPreference: "high-performance",
-      premultipliedAlpha: false,
-    });
+    if (!await this.initializeRenderer()) return false;
 
-    if (!context) {
-      this.setStatus({ loading: false, failure: "WebGL2 is not available in this browser." });
-      return false;
-    }
-
-    try {
-      this.renderer = this.options.createRenderer(this.options.canvas, context, this.options.quality);
-      this.renderer.setPixelRatio(this.dpr);
-    } catch {
-      this.setStatus({ loading: false, failure: "The GPU renderer could not be initialized." });
-      return false;
-    }
-
-    this.options.canvas.addEventListener("webglcontextlost", this.onContextLost);
-    this.options.canvas.addEventListener("webglcontextrestored", this.onContextRestored);
     this.options.environment.addWindowListener("resize", this.onResize);
     this.options.environment.addWindowListener("pointermove", this.onPointerMove);
     this.options.environment.addWindowListener("pointerout", this.onPointerOut);
@@ -171,23 +160,26 @@ export class ShaderStageController {
     this.resizeObserver?.observe(this.options.host);
     this.resize();
     this.previousFrameTime = this.options.environment.now();
-    this.startAnimationLoop();
-    return this.switchEffect(this.effectId, this.preset);
+    const loaded = await this.switchEffect(this.effectId, this.preset);
+    if (loaded) this.startAnimationLoop();
+    return loaded;
   }
 
   async switchEffect(effectId: EffectId, preset = this.preset): Promise<boolean> {
-    if (this.disposed || !this.renderer) return false;
+    if (this.disposed) return false;
     this.effectId = effectId;
     this.preset = preset;
+    if (!this.renderer) return false;
     const generation = ++this.generation;
     const previous = this.instance;
     this.instance = null;
     previous?.dispose();
     this.setStatus({ loading: true, failure: null });
     const { width, height } = this.measure();
+    let instance: EffectInstance | null = null;
 
     try {
-      const instance = await this.options.createEffect(effectId, {
+      instance = await this.options.createEffect(effectId, {
         renderer: this.renderer,
         width,
         height,
@@ -210,6 +202,10 @@ export class ShaderStageController {
       this.setStatus({ loading: false, failure: null });
       return true;
     } catch (error) {
+      if (instance) {
+        if (this.instance === instance) this.instance = null;
+        instance.dispose();
+      }
       if (!this.disposed && generation === this.generation) {
         console.error("Shader runtime failed to load", error);
         this.setStatus({
@@ -250,21 +246,17 @@ export class ShaderStageController {
     if (this.disposed) return;
     this.disposed = true;
     this.generation += 1;
+    this.rendererGeneration += 1;
     if (this.animationFrame) this.options.environment.cancelAnimationFrame(this.animationFrame);
     this.animationFrame = 0;
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
-    if (this.renderer) {
-      this.options.environment.removeWindowListener("resize", this.onResize);
-      this.options.environment.removeWindowListener("pointermove", this.onPointerMove);
-      this.options.environment.removeWindowListener("pointerout", this.onPointerOut);
-      this.options.environment.removeWindowListener("blur", this.onPointerClear);
-      this.options.canvas.removeEventListener("webglcontextlost", this.onContextLost);
-      this.options.canvas.removeEventListener("webglcontextrestored", this.onContextRestored);
-    }
+    this.options.environment.removeWindowListener("resize", this.onResize);
+    this.options.environment.removeWindowListener("pointermove", this.onPointerMove);
+    this.options.environment.removeWindowListener("pointerout", this.onPointerOut);
+    this.options.environment.removeWindowListener("blur", this.onPointerClear);
     this.instance?.dispose();
     this.instance = null;
-    this.renderer?.renderLists.dispose();
     this.renderer?.dispose();
     this.renderer = null;
   }
@@ -294,14 +286,14 @@ export class ShaderStageController {
       this.reducedMotion
       || this.animationFrame
       || this.disposed
-      || this.contextLost
+      || this.deviceLost
       || !this.renderer
     ) return;
     this.animationFrame = this.options.environment.requestAnimationFrame(this.frame);
   }
 
   private renderStaticFrame(): void {
-    if (!this.renderer || !this.instance || this.contextLost) return;
+    if (!this.renderer || !this.instance || this.deviceLost) return;
     const elapsed = this.reducedMotion ? 0 : this.activeElapsed;
     this.instance.update({
       elapsed,
@@ -315,7 +307,7 @@ export class ShaderStageController {
 
   private readonly frame: FrameRequestCallback = (now) => {
     this.animationFrame = 0;
-    if (this.disposed || this.contextLost) return;
+    if (this.disposed || this.deviceLost) return;
     this.startAnimationLoop();
     const rawDelta = Math.min(Math.max((now - this.previousFrameTime) / 1_000, 0), 0.05);
     this.previousFrameTime = now;
@@ -366,23 +358,116 @@ export class ShaderStageController {
     this.pointer = null;
   };
 
-  private readonly onContextLost: EventListener = (event) => {
-    event.preventDefault();
-    this.contextLost = true;
+  private onDeviceLost(
+    info: StageDeviceLostInfo,
+    renderer: StageRenderer,
+  ): void {
+    if (this.disposed) return;
+    this.deviceLost = true;
     if (this.animationFrame) this.options.environment.cancelAnimationFrame(this.animationFrame);
     this.animationFrame = 0;
     this.setStatus({
       loading: false,
-      failure: "The graphics context was lost. Waiting for the GPU to recover.",
+      failure: info.api === "WebGPU"
+        ? "The WebGPU device was lost. Rebuilding the renderer."
+        : "The WebGL2 context was lost. Reload the page to restart graphics.",
     });
-  };
+    if (info.api === "WebGPU" && this.renderer === renderer) {
+      if (this.rebuildingRenderer) {
+        this.rendererRebuildRequested = true;
+      } else {
+        void this.rebuildRenderer();
+      }
+    }
+  }
 
-  private readonly onContextRestored: EventListener = () => {
-    if (this.disposed || !this.renderer) return;
-    this.contextLost = false;
+  private async initializeRenderer(): Promise<boolean> {
+    const rendererGeneration = ++this.rendererGeneration;
+    let renderer: StageRenderer | null = null;
+    const initializationState: { loss: StageDeviceLostInfo | null } = { loss: null };
+    try {
+      renderer = await this.options.createRenderer(this.options.canvas, this.options.quality);
+      const candidateRenderer = renderer;
+      const defaultOnDeviceLost = candidateRenderer.onDeviceLost?.bind(candidateRenderer);
+      candidateRenderer.onDeviceLost = (info) => {
+        defaultOnDeviceLost?.(info);
+        if (this.disposed || rendererGeneration !== this.rendererGeneration) return;
+        if (this.renderer !== candidateRenderer) initializationState.loss = info;
+        this.onDeviceLost(info, candidateRenderer);
+      };
+      await candidateRenderer.init();
+      if (this.disposed || rendererGeneration !== this.rendererGeneration) {
+        candidateRenderer.dispose();
+        return false;
+      }
+      const initializationLoss = initializationState.loss;
+      if (initializationLoss) {
+        candidateRenderer.dispose();
+        return initializationLoss.api === "WebGPU"
+          ? this.initializeRenderer()
+          : false;
+      }
+      this.deviceLost = false;
+      this.renderer = candidateRenderer;
+      candidateRenderer.setPixelRatio(this.dpr);
+      return true;
+    } catch (error) {
+      renderer?.dispose();
+      if (this.disposed || rendererGeneration !== this.rendererGeneration) return false;
+      const initializationLoss = initializationState.loss;
+      if (initializationLoss) {
+        return initializationLoss.api === "WebGPU"
+          ? this.initializeRenderer()
+          : false;
+      }
+      console.error("GPU renderer failed to initialize", error);
+      this.setStatus({
+        loading: false,
+        failure: "The WebGPU/WebGL2 renderer could not be initialized in this browser.",
+      });
+      return false;
+    }
+  }
+
+  private async rebuildRenderer(): Promise<boolean> {
+    if (this.disposed || this.rebuildingRenderer) return false;
+    this.rebuildingRenderer = true;
+    this.generation += 1;
+    this.instance?.dispose();
+    this.instance = null;
+    const previousRenderer = this.renderer;
+    this.renderer = null;
+    previousRenderer?.dispose();
+
+    const initialized = await this.initializeRenderer();
+    if (!initialized || this.disposed) {
+      this.rebuildingRenderer = false;
+      return false;
+    }
+
+    if (this.rendererRebuildRequested) {
+      this.rendererRebuildRequested = false;
+      this.rebuildingRenderer = false;
+      return this.rebuildRenderer();
+    }
+    if (this.deviceLost) {
+      this.rebuildingRenderer = false;
+      return false;
+    }
+    this.resize();
     this.previousFrameTime = this.options.environment.now();
-    void this.switchEffect(this.effectId, this.preset).then(() => {
-      this.startAnimationLoop();
-    });
-  };
+    const loaded = await this.switchEffect(this.effectId, this.preset);
+    if (this.rendererRebuildRequested) {
+      this.rendererRebuildRequested = false;
+      this.rebuildingRenderer = false;
+      return this.rebuildRenderer();
+    }
+    if (this.deviceLost) {
+      this.rebuildingRenderer = false;
+      return false;
+    }
+    this.rebuildingRenderer = false;
+    if (loaded) this.startAnimationLoop();
+    return loaded;
+  }
 }

@@ -1,6 +1,7 @@
 # Echoes Shaders
 
-An open-source field guide to five production WebGL shader systems. The project pairs live,
+An open-source field guide to five production WebGL shader systems, preserved as readable GLSL and
+rebuilt in Three.js TSL for WebGPU with automatic WebGL2 fallback. The project pairs live,
 interactive demonstrations with classification, presets, source tabs, provenance, and practical
 implementation notes.
 
@@ -127,10 +128,12 @@ recordings, screenshots, models, or product branding.
 
 ## Rendering and accessibility
 
-The shared WebGL stage caps device pixel ratio at `1.5`, uses a 16K constrained-device particle budget
-and a 64K standard budget, pauses when the document is hidden, and releases GPU resources when effects
-change. Reduced-motion preferences disable continuous movement, and unsupported or lost WebGL contexts
-receive an accessible static fallback.
+The shared stage prefers WebGPU and automatically falls back to WebGL2. It caps device pixel ratio at
+`1.5`, uses a 16K constrained-device particle budget and a 64K standard budget, pauses when the document
+is hidden, and releases GPU resources when effects change. Reduced-motion preferences disable continuous
+movement, lost devices are rebuilt when possible, and unavailable GPU backends receive an accessible
+static fallback. Effect pages expose a visible WebGPU/WebGL2 renderer selector; the WebGL2 choice is
+mirrored to `?renderer=webgl2` so the forced fallback can also be linked and tested directly.
 
 ## Contributing and license
 

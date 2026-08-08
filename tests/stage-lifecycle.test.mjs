@@ -35,17 +35,7 @@ class FakeEventTarget {
   }
 }
 
-class FakeCanvas extends FakeEventTarget {
-  constructor(context = {}) {
-    super();
-    this.context = context;
-  }
-
-  getContext(type) {
-    assert.equal(type, "webgl2");
-    return this.context;
-  }
-}
+class FakeCanvas extends FakeEventTarget {}
 
 class FakeEnvironment {
   nowValue = 1_000;
@@ -104,17 +94,17 @@ class FakeEnvironment {
 
 function makeRenderer() {
   const renderer = {
+    initCalls: 0,
     pixelRatios: [],
     sizes: [],
     renders: 0,
-    renderListDisposals: 0,
     disposals: 0,
+    lostEvents: [],
+    async init() { this.initCalls += 1; },
     setPixelRatio(value) { this.pixelRatios.push(value); },
     setSize(width, height, updateStyle) { this.sizes.push([width, height, updateStyle]); },
     render() { this.renders += 1; },
-    renderLists: {
-      dispose: () => { renderer.renderListDisposals += 1; },
-    },
+    onDeviceLost(info) { this.lostEvents.push(info); },
     dispose() { this.disposals += 1; },
   };
   return renderer;
@@ -144,12 +134,24 @@ function makeRuntime(id) {
   };
 }
 
-function makeHarness({ context = {}, reducedMotion = false, pointCloud = null } = {}) {
+function deferred() {
+  let resolve;
+  const promise = new Promise((resolvePromise) => { resolve = resolvePromise; });
+  return { promise, resolve };
+}
+
+function makeHarness({
+  rendererError = null,
+  rendererFactory = () => makeRenderer(),
+  reducedMotion = false,
+  pointCloud = null,
+} = {}) {
   const environment = new FakeEnvironment();
   environment.reducedMotion = reducedMotion;
-  const canvas = new FakeCanvas(context);
+  const canvas = new FakeCanvas();
   const host = { getBoundingClientRect: () => ({ width: 801.4, height: 449.6, left: 10, top: 20 }) };
-  const renderer = makeRenderer();
+  const renderer = rendererFactory(0);
+  const renderers = [];
   const runtimes = [];
   const contexts = [];
   const statuses = [];
@@ -161,7 +163,12 @@ function makeHarness({ context = {}, reducedMotion = false, pointCloud = null } 
     environment,
     preset: "quiet-drift",
     pointCloud,
-    createRenderer: () => renderer,
+    createRenderer: () => {
+      if (rendererError) throw rendererError;
+      const nextRenderer = renderers.length === 0 ? renderer : rendererFactory(renderers.length);
+      renderers.push(nextRenderer);
+      return nextRenderer;
+    },
     createEffect: async (id, runtimeContext) => {
       contexts.push(runtimeContext);
       const runtime = makeRuntime(id);
@@ -170,10 +177,10 @@ function makeHarness({ context = {}, reducedMotion = false, pointCloud = null } 
     },
     onStatus: (status) => statuses.push(status),
   });
-  return { controller, environment, canvas, host, renderer, runtimes, contexts, statuses };
+  return { controller, environment, canvas, host, renderer, renderers, runtimes, contexts, statuses };
 }
 
-test("browser-local point targets reach the runtime and survive context restoration", async () => {
+test("browser-local point targets reach the runtime and survive WebGPU renderer restoration", async () => {
   const pointCloud = {
     positions: new Float32Array([0, 0, 0]),
     colors: new Float32Array([0, 1, 1]),
@@ -186,8 +193,12 @@ test("browser-local point targets reach the runtime and survive context restorat
   await harness.controller.mount();
   assert.equal(harness.contexts[0].pointCloud, pointCloud);
 
-  harness.canvas.dispatch("webglcontextlost");
-  harness.canvas.dispatch("webglcontextrestored");
+  harness.renderer.onDeviceLost({
+    api: "WebGPU",
+    message: "test loss",
+    reason: "unknown",
+    originalEvent: null,
+  });
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(harness.contexts[1].pointCloud, pointCloud);
   harness.controller.dispose();
@@ -198,8 +209,7 @@ test("controller mounts, switches effects, and releases every owned resource on 
   assert.equal(await harness.controller.mount(), true);
   const first = harness.runtimes[0];
 
-  assert.equal(harness.canvas.listenerCount("webglcontextlost"), 1);
-  assert.equal(harness.canvas.listenerCount("webglcontextrestored"), 1);
+  assert.equal(harness.renderer.initCalls, 1);
   assert.equal(harness.environment.windowTarget.listenerCount("resize"), 1);
   assert.equal(harness.environment.windowTarget.listenerCount("pointermove"), 1);
   assert.equal(harness.environment.frames.size, 1);
@@ -228,7 +238,6 @@ test("controller mounts, switches effects, and releases every owned resource on 
 
   assert.equal(second.disposals, 1);
   assert.deepEqual(second.resources, { geometry: 1, material: 1, renderTarget: 1 });
-  assert.equal(harness.renderer.renderListDisposals, 1);
   assert.equal(harness.renderer.disposals, 1);
   assert.equal(harness.environment.observer.disconnected, 1);
   assert.equal(harness.environment.frames.size, 0);
@@ -236,12 +245,41 @@ test("controller mounts, switches effects, and releases every owned resource on 
   assert.equal(harness.environment.windowTarget.listenerCount("pointermove"), 0);
   assert.equal(harness.environment.windowTarget.listenerCount("pointerout"), 0);
   assert.equal(harness.environment.windowTarget.listenerCount("blur"), 0);
-  assert.equal(harness.canvas.listenerCount("webglcontextlost"), 0);
-  assert.equal(harness.canvas.listenerCount("webglcontextrestored"), 0);
 
   harness.controller.dispose();
   assert.equal(second.disposals, 1, "dispose is idempotent");
   assert.equal(harness.renderer.disposals, 1);
+});
+
+test("effect switches requested during renderer initialization are applied after initialization", async () => {
+  const initializationStarted = deferred();
+  const releaseInitialization = deferred();
+  const harness = makeHarness({
+    rendererFactory: () => {
+      const renderer = makeRenderer();
+      renderer.init = async function init() {
+        this.initCalls += 1;
+        initializationStarted.resolve();
+        await releaseInitialization.promise;
+      };
+      return renderer;
+    },
+  });
+
+  const mounted = harness.controller.mount();
+  await initializationStarted.promise;
+  assert.equal(
+    await harness.controller.switchEffect("voice-wave-particles", "bass-current"),
+    false,
+    "the switch is queued while no renderer is published",
+  );
+  releaseInitialization.resolve();
+
+  assert.equal(await mounted, true);
+  assert.equal(harness.runtimes.length, 1);
+  assert.equal(harness.runtimes[0].id, "voice-wave-particles");
+  assert.deepEqual(harness.runtimes[0].selectedPresets, ["bass-current"]);
+  harness.controller.dispose();
 });
 
 test("a lazily loaded runtime receives the latest host size", async () => {
@@ -273,49 +311,210 @@ test("a lazily loaded runtime receives the latest host size", async () => {
   environment.windowTarget.dispatch("resize");
   releaseRuntime(runtime);
   assert.equal(await mounted, true);
-  assert.deepEqual(creationSize, [400, 240]);
+  assert.deepEqual(creationSize, [960, 540]);
   assert.deepEqual(runtime.resizes.at(-1), [960, 540, 1.5]);
   controller.dispose();
 });
 
-test("WebGL2 unavailability selects the accessible static fallback without allocating GPU work", async () => {
-  const harness = makeHarness({ context: null });
+test("renderer initialization failure selects the accessible static fallback without allocating GPU work", async (t) => {
+  t.mock.method(console, "error", () => {});
+  const harness = makeHarness({ rendererError: new Error("no compatible GPU backend") });
   assert.equal(await harness.controller.mount(), false);
   assert.deepEqual(harness.statuses, [{
     loading: false,
-    failure: "WebGL2 is not available in this browser.",
+    failure: "The WebGPU/WebGL2 renderer could not be initialized in this browser.",
   }]);
   assert.equal(harness.runtimes.length, 0);
   assert.equal(harness.environment.frames.size, 0);
-  assert.equal(harness.canvas.listenerCount("webglcontextlost"), 0);
   harness.controller.dispose();
   assert.equal(harness.renderer.disposals, 0);
 });
 
-test("context loss stops rendering and restoration rebuilds the effect before resuming", async () => {
+test("WebGL2 loss stops rendering and selects the accessible reload fallback", async () => {
   const harness = makeHarness();
   await harness.controller.mount();
   const first = harness.runtimes[0];
   harness.environment.runNextFrame(16);
   assert.equal(first.updates.length, 2);
 
-  const event = harness.canvas.dispatch("webglcontextlost");
-  assert.equal(event.defaultPrevented, true);
+  harness.renderer.onDeviceLost({
+    api: "WebGL",
+    message: "test loss",
+    reason: null,
+    originalEvent: null,
+  });
   assert.equal(harness.environment.frames.size, 0);
-  assert.match(harness.statuses.at(-1).failure, /context was lost/i);
+  assert.match(harness.statuses.at(-1).failure, /WebGL2 context was lost/i);
 
-  harness.environment.nowValue += 20_000;
-  harness.canvas.dispatch("webglcontextrestored");
+  assert.match(harness.statuses.at(-1).failure, /reload the page/i);
+  assert.equal(first.disposals, 0);
+  assert.equal(harness.renderers.length, 1);
+  assert.equal(harness.environment.frames.size, 0);
+  harness.controller.dispose();
+});
+
+test("WebGPU device loss rebuilds immediately without waiting for a WebGL event", async () => {
+  const harness = makeHarness();
+  await harness.controller.mount();
+  const first = harness.runtimes[0];
+
+  harness.renderer.onDeviceLost({
+    api: "WebGPU",
+    message: "adapter reset",
+    reason: "unknown",
+    originalEvent: null,
+  });
   await new Promise((resolve) => setImmediate(resolve));
-  const restored = harness.runtimes[1];
+
   assert.equal(first.disposals, 1);
-  assert.ok(restored);
+  assert.equal(harness.renderer.disposals, 1);
+  assert.equal(harness.renderers.length, 2);
+  assert.equal(harness.runtimes.length, 2);
   assert.equal(harness.statuses.at(-1).failure, null);
   assert.equal(harness.environment.frames.size, 1);
-
-  harness.environment.runNextFrame(16);
-  assert.ok(restored.updates[0].elapsed < 0.1, "lost time is excluded from animation elapsed time");
   harness.controller.dispose();
+});
+
+test("a WebGPU replacement lost during initialization is discarded and retried", async () => {
+  const replacementStarted = deferred();
+  const releaseReplacement = deferred();
+  const harness = makeHarness({
+    rendererFactory: (index) => {
+      const renderer = makeRenderer();
+      if (index === 1) {
+        renderer.init = async function init() {
+          this.initCalls += 1;
+          replacementStarted.resolve();
+          await releaseReplacement.promise;
+        };
+      }
+      return renderer;
+    },
+  });
+  await harness.controller.mount();
+
+  harness.renderer.onDeviceLost({
+    api: "WebGPU",
+    message: "first adapter reset",
+    reason: "unknown",
+    originalEvent: null,
+  });
+  await replacementStarted.promise;
+  const lostReplacement = harness.renderers[1];
+  lostReplacement.onDeviceLost({
+    api: "WebGPU",
+    message: "replacement reset during init",
+    reason: "unknown",
+    originalEvent: null,
+  });
+  releaseReplacement.resolve();
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(harness.renderers.length, 3);
+  assert.equal(lostReplacement.disposals, 1);
+  assert.equal(harness.runtimes.length, 2, "no effect is created for the lost replacement");
+  assert.equal(harness.contexts[1].renderer, harness.renderers[2]);
+  assert.equal(harness.statuses.at(-1).failure, null);
+  assert.equal(harness.environment.frames.size, 1);
+  harness.controller.dispose();
+});
+
+test("a WebGPU loss during initial initialization retries before mounting listeners", async () => {
+  const initializationStarted = deferred();
+  const releaseInitialization = deferred();
+  const harness = makeHarness({
+    rendererFactory: (index) => {
+      const renderer = makeRenderer();
+      if (index === 0) {
+        renderer.init = async function init() {
+          this.initCalls += 1;
+          initializationStarted.resolve();
+          await releaseInitialization.promise;
+        };
+      }
+      return renderer;
+    },
+  });
+
+  const mounted = harness.controller.mount();
+  await initializationStarted.promise;
+  harness.renderer.onDeviceLost({
+    api: "WebGPU",
+    message: "reset during initial init",
+    reason: "unknown",
+    originalEvent: null,
+  });
+  releaseInitialization.resolve();
+
+  assert.equal(await mounted, true);
+  assert.equal(harness.renderers.length, 2);
+  assert.equal(harness.renderer.disposals, 1);
+  assert.equal(harness.environment.windowTarget.listenerCount("resize"), 1);
+  assert.equal(harness.environment.windowTarget.listenerCount("pointermove"), 1);
+  assert.equal(harness.environment.frames.size, 1);
+  harness.controller.dispose();
+});
+
+test("unmount during a pending WebGPU rebuild removes every window listener", async () => {
+  const replacementStarted = deferred();
+  const releaseReplacement = deferred();
+  const harness = makeHarness({
+    rendererFactory: (index) => {
+      const renderer = makeRenderer();
+      if (index === 1) {
+        renderer.init = async function init() {
+          this.initCalls += 1;
+          replacementStarted.resolve();
+          await releaseReplacement.promise;
+        };
+      }
+      return renderer;
+    },
+  });
+  await harness.controller.mount();
+
+  harness.renderer.onDeviceLost({
+    api: "WebGPU",
+    message: "adapter reset",
+    reason: "unknown",
+    originalEvent: null,
+  });
+  await replacementStarted.promise;
+  const pendingReplacement = harness.renderers[1];
+  harness.controller.dispose();
+
+  assert.equal(harness.environment.windowTarget.listenerCount("resize"), 0);
+  assert.equal(harness.environment.windowTarget.listenerCount("pointermove"), 0);
+  assert.equal(harness.environment.windowTarget.listenerCount("pointerout"), 0);
+  assert.equal(harness.environment.windowTarget.listenerCount("blur"), 0);
+  releaseReplacement.resolve();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(pendingReplacement.disposals, 1);
+});
+
+test("a first-render failure disposes the candidate effect and leaves the RAF loop safe", async (t) => {
+  t.mock.method(console, "error", () => {});
+  const harness = makeHarness();
+  await harness.controller.mount();
+  const originalRender = harness.renderer.render.bind(harness.renderer);
+  let failNextRender = true;
+  harness.renderer.render = () => {
+    if (failNextRender) {
+      failNextRender = false;
+      throw new Error("pipeline compilation failed");
+    }
+    originalRender();
+  };
+
+  assert.equal(await harness.controller.switchEffect("voice-wave-particles", "balanced"), false);
+  const failedRuntime = harness.runtimes[1];
+  assert.equal(failedRuntime.disposals, 1);
+  assert.match(harness.statuses.at(-1).failure, /could not be prepared/i);
+  assert.doesNotThrow(() => harness.environment.runNextFrame(16));
+  assert.equal(failedRuntime.updates.length, 1, "the failed runtime is no longer used by RAF");
+
+  harness.controller.dispose();
+  assert.equal(failedRuntime.disposals, 1, "the failed runtime is not disposed twice");
 });
 
 test("paused, hidden, and reduced-motion frames never accumulate disabled wall time", async () => {

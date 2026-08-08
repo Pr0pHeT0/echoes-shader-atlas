@@ -934,6 +934,7 @@ button {
   display: flex;
   min-height: 4.2rem;
   align-items: stretch;
+  overflow-x: auto;
   border: 1px solid var(--line-strong);
   background: rgba(5, 8, 10, 0.84);
   backdrop-filter: blur(16px);
@@ -1650,10 +1651,6 @@ button {
   .detail-hero__content {
     grid-template-columns: 1fr;
     bottom: 9rem;
-  }
-
-  .detail-controls {
-    overflow-x: auto;
   }
 
   .control-group {

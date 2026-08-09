@@ -62,6 +62,7 @@ test("the shared stage prefers WebGPU, retains WebGL2 fallback testing, and init
   const detail = await source("app/components/EffectDetail.tsx");
   const controller = await source("lib/effects/stage-controller.ts");
   const types = await source("lib/effects/types.ts");
+  const styles = await source("app/globals.css");
 
   assert.match(stage, /import\(["']three\/webgpu["']\)/);
   assert.match(stage, /new THREE\.WebGPURenderer/);
@@ -77,7 +78,39 @@ test("the shared stage prefers WebGPU, retains WebGL2 fallback testing, and init
   assert.match(detail, /url\.searchParams\.set\(["']renderer["'], ["']webgl2["']\)/);
   assert.match(detail, /url\.searchParams\.delete\(["']renderer["']\)/);
   assert.match(detail, /renderer_change/);
+  assert.match(detail, /isOrganicMaterialization \? ["']State["'] : ["']Preset["']/);
+  assert.match(detail, /aria-label=["']Transition["']/);
+  assert.match(detail, /aria-label=["']Motion["']/);
+  assert.match(detail, /transitionReplayToken=\{transitionReplayToken\}/);
+  assert.match(detail, /motionReplayToken=\{motionReplayToken\}/);
+  assert.match(detail, /setPreset\(["']materialize["']\)/);
+  assert.match(detail, /setPaused\(false\)/);
+  assert.match(detail, /transition_change/);
+  assert.match(detail, /motion_change/);
+  assert.match(detail, /transition_id: candidateId/);
+  assert.match(detail, /motion_id: candidateId/);
+  assert.match(detail, /replayed/);
+  const transitionHandler = detail.match(
+    /function selectTransitionVariant[\s\S]+?(?=\n {2}function selectMotionVariant)/,
+  )?.[0] ?? "";
+  const motionHandler = detail.match(
+    /function selectMotionVariant[\s\S]+?(?=\n {2}function togglePlayback)/,
+  )?.[0] ?? "";
+  assert.match(transitionHandler, /setPreset\(["']materialize["']\)/);
+  assert.match(transitionHandler, /setPaused\(false\)/);
+  assert.doesNotMatch(motionHandler, /setPreset|setPaused/);
+  assert.match(stage, /setTransitionVariant\(transitionVariant\)/);
+  assert.match(stage, /setMotionVariant\(motionVariant\)/);
+  assert.match(controller, /transitionVariant: requestedTransitionVariant/);
+  assert.match(controller, /motionVariant: requestedMotionVariant/);
+  assert.match(
+    controller,
+    /setMotionVariant\?\.\([\s\S]*!\(this\.paused \|\| this\.reducedMotion\)/,
+  );
+  assert.match(styles, /\.control-group\s*\{[^}]*flex:\s*0 0 auto;/s);
   assert.match(controller, /await (?:candidateRenderer|renderer)\.init\(\)/);
   assert.match(controller, /info\.api === ["']WebGPU["']/);
   assert.match(types, /renderer: WebGPURenderer/);
+  assert.match(types, /setTransitionVariant\?/);
+  assert.match(types, /setMotionVariant\?\([^)]*crossfade\?: boolean/);
 });

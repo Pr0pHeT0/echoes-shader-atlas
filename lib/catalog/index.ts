@@ -13,6 +13,8 @@ export type {
   EffectFamily,
   EffectFilters,
   EffectId,
+  EffectMotionVariantMeta,
+  EffectTransitionVariantMeta,
   EffectPresetMeta,
   EffectStat,
   EffectStatus,
@@ -20,4 +22,6 @@ export type {
   ShaderSourceKind,
   ShaderSourceUnit,
   ShaderStage,
+  MaterializationMotionVariant,
+  MaterializationTransitionVariant,
 } from "./types";

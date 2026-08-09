@@ -1,3 +1,9 @@
+import type { MaterializationMotionVariant } from "../effects/materialization-motion";
+import type { MaterializationTransitionVariant } from "../effects/materialization-transition-variants";
+
+export type { MaterializationMotionVariant } from "../effects/materialization-motion";
+export type { MaterializationTransitionVariant } from "../effects/materialization-transition-variants";
+
 export type EffectId =
   | "aurora-field"
   | "voice-wave-particles"
@@ -28,6 +34,18 @@ export interface EffectAccent {
 
 export interface EffectPresetMeta {
   id: string;
+  label: string;
+  description: string;
+}
+
+export interface EffectMotionVariantMeta {
+  id: MaterializationMotionVariant;
+  label: string;
+  description: string;
+}
+
+export interface EffectTransitionVariantMeta {
+  id: MaterializationTransitionVariant;
   label: string;
   description: string;
 }
@@ -89,6 +107,8 @@ export interface ShaderEffectMeta {
   runtime: EffectId;
   sourceUnits: readonly ShaderSourceUnit[];
   presets: readonly EffectPresetMeta[];
+  transitionVariants?: readonly EffectTransitionVariantMeta[];
+  motionVariants?: readonly EffectMotionVariantMeta[];
   accent: EffectAccent;
   stats: readonly EffectStat[];
 }

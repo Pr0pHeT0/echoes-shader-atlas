@@ -81,7 +81,7 @@ test("server-renders every effect permalink with its own classified content", as
       const html = await renderedHtml(`/effects/${effectId}`);
       assert.match(html, new RegExp(effectNames.get(effectId), "i"));
       assert.match(html, /Source|GLSL/i);
-      assert.match(html, /Preset/i);
+      assert.match(html, effectId === "audio-reactive-materialization" ? /State/i : /Preset/i);
       assert.match(html, /aria-label=["']Renderer["']/i);
       assert.match(html, /WebGPU/i);
       assert.match(html, /WebGL2/i);
@@ -100,6 +100,43 @@ test("server-renders every effect permalink with its own classified content", as
         assert.match(html, />\s*Base\s*</i);
         assert.match(html, />\s*Terrain\s*</i);
         assert.match(html, /Upload…|Uploaded/i);
+      }
+      if (effectId === "audio-reactive-materialization") {
+        assert.doesNotMatch(html, /aria-label=["']Preset["']/i);
+        assert.match(html, /four reversible 3\.5-second transitions/i);
+        assert.match(html, /six independent looping motions|six continuous point motions/i);
+        assert.match(html, /organic arcs.+spiral vortex.+radial bloom.+traveling wave/is);
+        assert.match(html, /drift.+orbit.+breathe.+ripple.+twist.+flutter/is);
+        assert.match(html, /shared built-in and uploaded endpoints|same (?:built-in and uploaded )?endpoints/i);
+        assert.match(html, /polished alpha-hashed surface/i);
+        assert.match(html, /normal-offset sparks/i);
+        assert.match(html, /uploaded GLB.+dense anchored point surface/is);
+        assert.match(html, /extracted archival GLSL remains unchanged.+live TSL presentation intentionally departs/is);
+        assert.match(
+          html,
+          /aria-label=["']Renderer["'][\s\S]+aria-label=["']State["'][\s\S]+aria-label=["']Transition["'][\s\S]+aria-label=["']Motion["'][\s\S]+aria-label=["']Playback["'][\s\S]+aria-label=["']Quality["']/i,
+        );
+        assert.match(html, />\s*Cloud\s*</i);
+        assert.match(html, /<button[^>]*aria-pressed=["']true["'][^>]*>\s*Cloud\s*<\/button>/i);
+        assert.match(html, />\s*Organic\s*</i);
+        assert.match(html, />\s*Vortex\s*</i);
+        assert.match(html, />\s*Bloom\s*</i);
+        assert.match(html, />\s*Wave\s*</i);
+        assert.match(html, />\s*Drift\s*</i);
+        assert.match(html, /<button[^>]*aria-pressed=["']true["'][^>]*>\s*Organic\s*<\/button>/i);
+        assert.match(html, /<button[^>]*aria-pressed=["']true["'][^>]*>\s*Drift\s*<\/button>/i);
+        assert.match(html, />\s*Orbit\s*</i);
+        assert.match(html, />\s*Breathe\s*</i);
+        assert.match(html, />\s*Ripple\s*</i);
+        assert.match(html, />\s*Twist\s*</i);
+        assert.match(html, />\s*Flutter\s*</i);
+        assert.doesNotMatch(
+          html,
+          /four-stage|four[- ]section|section by section|section threshold|particle lifetime|lifetime reset|reveal sections|section count/i,
+        );
+      } else {
+        assert.doesNotMatch(html, /aria-label=["']Transition["']/i);
+        assert.doesNotMatch(html, /aria-label=["']Motion["']/i);
       }
       if (["audio-reactive-materialization", "stylized-materialization"].includes(effectId)) {
         assert.match(

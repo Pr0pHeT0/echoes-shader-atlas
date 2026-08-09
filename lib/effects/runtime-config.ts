@@ -72,6 +72,8 @@ export const MATERIALIZATION_DEFAULTS = Object.freeze({
   trebleSizeStrength: 0.05,
 });
 
+export const MATERIALIZATION_TRANSITION_DURATION_SECONDS = 3.5;
+
 export const STYLIZED_MATERIALIZATION_DEFAULTS = Object.freeze({
   size: 0.058,
 });

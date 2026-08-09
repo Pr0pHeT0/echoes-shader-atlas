@@ -11,6 +11,8 @@ import type {
   MaterializationPointCloud,
   StylizedPointTarget,
 } from "@/lib/effects/types";
+import type { MaterializationMotionVariant } from "@/lib/effects/materialization-motion";
+import type { MaterializationTransitionVariant } from "@/lib/effects/materialization-transition-variants";
 
 export type ShaderStageAudio = AudioMetrics;
 export type ShaderStageQuality = StageQuality;
@@ -26,6 +28,10 @@ type ShaderStageProps = {
   audio?: ShaderStageAudio;
   pointCloud?: MaterializationPointCloud | null;
   pointTarget?: StylizedPointTarget;
+  transitionVariant?: MaterializationTransitionVariant;
+  transitionReplayToken?: number;
+  motionVariant?: MaterializationMotionVariant;
+  motionReplayToken?: number;
   label: string;
 };
 
@@ -60,6 +66,10 @@ export function ShaderStage({
   audio = ZERO_AUDIO,
   pointCloud = null,
   pointTarget,
+  transitionVariant,
+  transitionReplayToken = 0,
+  motionVariant,
+  motionReplayToken = 0,
   label,
 }: ShaderStageProps) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -74,6 +84,8 @@ export function ShaderStage({
     audio,
     pointCloud,
     pointTarget,
+    transitionVariant,
+    motionVariant,
   });
   const [failure, setFailure] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -87,8 +99,20 @@ export function ShaderStage({
       audio,
       pointCloud,
       pointTarget,
+      transitionVariant,
+      motionVariant,
     };
-  }, [audio, effectId, paused, pointCloud, pointTarget, preset, syntheticAudio]);
+  }, [
+    audio,
+    effectId,
+    motionVariant,
+    paused,
+    pointCloud,
+    pointTarget,
+    preset,
+    syntheticAudio,
+    transitionVariant,
+  ]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -120,6 +144,8 @@ export function ShaderStage({
           audio: initial.audio,
           pointCloud: initial.pointCloud,
           pointTarget: initial.pointTarget,
+          transitionVariant: initial.transitionVariant,
+          motionVariant: initial.motionVariant,
           createRenderer: (stageCanvas, stageQuality) => {
             const renderer = new THREE.WebGPURenderer({
               canvas: stageCanvas as HTMLCanvasElement,
@@ -165,12 +191,20 @@ export function ShaderStage({
     const controller = controllerRef.current;
     if (!controller || mountedEffectRef.current === effectId) return;
     mountedEffectRef.current = effectId;
-    void controller.switchEffect(effectId, preset);
-  }, [effectId, preset]);
+    void controller.switchEffect(effectId, preset, transitionVariant, motionVariant);
+  }, [effectId, motionVariant, preset, transitionVariant]);
 
   useEffect(() => {
     controllerRef.current?.setPreset(preset);
   }, [preset]);
+
+  useEffect(() => {
+    controllerRef.current?.setTransitionVariant(transitionVariant);
+  }, [transitionReplayToken, transitionVariant]);
+
+  useEffect(() => {
+    controllerRef.current?.setMotionVariant(motionVariant);
+  }, [motionReplayToken, motionVariant]);
 
   useEffect(() => {
     controllerRef.current?.setPaused(paused);

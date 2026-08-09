@@ -7,6 +7,8 @@ import type {
   MaterializationPointCloud,
   StylizedPointTarget,
 } from "./types";
+import type { MaterializationMotionVariant } from "./materialization-motion";
+import type { MaterializationTransitionVariant } from "./materialization-transition-variants";
 
 export type StageQuality = "low" | "auto" | "high";
 
@@ -63,6 +65,8 @@ export interface StageRuntimeContext {
   reducedMotion: boolean;
   pointCloud?: MaterializationPointCloud | null;
   pointTarget?: StylizedPointTarget;
+  transitionVariant?: MaterializationTransitionVariant;
+  motionVariant?: MaterializationMotionVariant;
 }
 
 export interface StageStatus {
@@ -85,6 +89,8 @@ export interface StageControllerOptions {
   audio?: AudioMetrics;
   pointCloud?: MaterializationPointCloud | null;
   pointTarget?: StylizedPointTarget;
+  transitionVariant?: MaterializationTransitionVariant;
+  motionVariant?: MaterializationMotionVariant;
 }
 
 const ZERO_AUDIO: AudioMetrics = { level: 0, bass: 0, mid: 0, treble: 0 };
@@ -136,6 +142,8 @@ export class ShaderStageController {
   private audio: AudioMetrics;
   private pointCloud: MaterializationPointCloud | null;
   private readonly pointTarget?: StylizedPointTarget;
+  private transitionVariant?: MaterializationTransitionVariant;
+  private motionVariant?: MaterializationMotionVariant;
   private pointer: EffectPointer | null = null;
 
   constructor(options: StageControllerOptions) {
@@ -147,6 +155,8 @@ export class ShaderStageController {
     this.audio = options.audio ?? ZERO_AUDIO;
     this.pointCloud = options.pointCloud ?? null;
     this.pointTarget = options.pointTarget;
+    this.transitionVariant = options.transitionVariant;
+    this.motionVariant = options.motionVariant;
     this.reducedMotion = options.environment.matchMedia("(prefers-reduced-motion: reduce)").matches;
     this.dpr = Math.min(Math.max(options.environment.devicePixelRatio || 1, 0.5), 1.5);
     this.particleCount = selectStageParticleCount(options.quality, options.environment);
@@ -165,15 +175,27 @@ export class ShaderStageController {
     this.resizeObserver?.observe(this.options.host);
     this.resize();
     this.previousFrameTime = this.options.environment.now();
-    const loaded = await this.switchEffect(this.effectId, this.preset);
+    const loaded = await this.switchEffect(
+      this.effectId,
+      this.preset,
+      this.transitionVariant,
+      this.motionVariant,
+    );
     if (loaded) this.startAnimationLoop();
     return loaded;
   }
 
-  async switchEffect(effectId: EffectId, preset = this.preset): Promise<boolean> {
+  async switchEffect(
+    effectId: EffectId,
+    preset = this.preset,
+    transitionVariant = this.transitionVariant,
+    motionVariant = this.motionVariant,
+  ): Promise<boolean> {
     if (this.disposed) return false;
     this.effectId = effectId;
     this.preset = preset;
+    this.transitionVariant = transitionVariant;
+    this.motionVariant = motionVariant;
     if (!this.renderer) return false;
     const generation = ++this.generation;
     const previous = this.instance;
@@ -181,6 +203,8 @@ export class ShaderStageController {
     previous?.dispose();
     this.setStatus({ loading: true, failure: null });
     const { width, height } = this.measure();
+    const requestedTransitionVariant = this.transitionVariant;
+    const requestedMotionVariant = this.motionVariant;
     let instance: EffectInstance | null = null;
 
     try {
@@ -193,6 +217,8 @@ export class ShaderStageController {
         reducedMotion: this.reducedMotion,
         pointCloud: this.pointCloud,
         pointTarget: this.pointTarget,
+        transitionVariant: requestedTransitionVariant,
+        motionVariant: requestedMotionVariant,
       });
       if (this.disposed || generation !== this.generation) {
         instance.dispose();
@@ -202,6 +228,18 @@ export class ShaderStageController {
       this.activeElapsed = 0;
       this.previousFrameTime = this.options.environment.now();
       if (this.preset) instance.setPreset(this.preset);
+      if (
+        this.transitionVariant
+        && this.transitionVariant !== requestedTransitionVariant
+      ) {
+        instance.setTransitionVariant?.(this.transitionVariant);
+      }
+      if (this.motionVariant && this.motionVariant !== requestedMotionVariant) {
+        instance.setMotionVariant?.(
+          this.motionVariant,
+          !(this.paused || this.reducedMotion),
+        );
+      }
       const currentSize = this.measure();
       instance.resize(currentSize.width, currentSize.height, this.dpr);
       this.renderStaticFrame();
@@ -226,6 +264,23 @@ export class ShaderStageController {
   setPreset(preset?: string): void {
     this.preset = preset;
     if (preset) this.instance?.setPreset(preset);
+    if (this.paused || this.reducedMotion) this.renderStaticFrame();
+  }
+
+  setTransitionVariant(transitionVariant?: MaterializationTransitionVariant): void {
+    this.transitionVariant = transitionVariant;
+    if (transitionVariant) this.instance?.setTransitionVariant?.(transitionVariant);
+    if (this.paused || this.reducedMotion) this.renderStaticFrame();
+  }
+
+  setMotionVariant(motionVariant?: MaterializationMotionVariant): void {
+    this.motionVariant = motionVariant;
+    if (motionVariant) {
+      this.instance?.setMotionVariant?.(
+        motionVariant,
+        !(this.paused || this.reducedMotion),
+      );
+    }
     if (this.paused || this.reducedMotion) this.renderStaticFrame();
   }
 
@@ -465,7 +520,12 @@ export class ShaderStageController {
     }
     this.resize();
     this.previousFrameTime = this.options.environment.now();
-    const loaded = await this.switchEffect(this.effectId, this.preset);
+    const loaded = await this.switchEffect(
+      this.effectId,
+      this.preset,
+      this.transitionVariant,
+      this.motionVariant,
+    );
     if (this.rendererRebuildRequested) {
       this.rendererRebuildRequested = false;
       this.rebuildingRenderer = false;

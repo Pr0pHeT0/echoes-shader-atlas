@@ -127,6 +127,99 @@ test("Stylized Point Field documents three styles and three static target source
   assert.doesNotMatch(copy, /immutable 64-glyph ASCII atlas/i);
 });
 
+test("Point-Cloud Materialization catalogs independent transitions and looping point motions", async () => {
+  const { getEffectBySlug, shaderEffects } = await loadCatalog();
+  const materialization = getEffectBySlug("audio-reactive-materialization");
+  assert.ok(materialization);
+
+  assert.equal(materialization.status, "archived");
+  assert.deepEqual(
+    materialization.presets.map(({ id }) => id),
+    ["dormant", "materialize", "pulse", "dissolve"],
+  );
+  assert.deepEqual(
+    materialization.presets.map(({ label }) => label),
+    ["Cloud", "Materialize", "Flow Surge", "Dissolve"],
+  );
+  assert.deepEqual(materialization.transitionVariants, [
+    {
+      id: "organic-arc",
+      label: "Organic",
+      description: "Follows the current seeded tangent-space arc into the target.",
+    },
+    {
+      id: "spiral-vortex",
+      label: "Vortex",
+      description: "Orbits the model-space vertical axis in a shrinking seeded spiral.",
+    },
+    {
+      id: "radial-bloom",
+      label: "Bloom",
+      description: "Arrives center-out with a bounded surface-normal overshoot.",
+    },
+    {
+      id: "traveling-wave",
+      label: "Wave",
+      description: "Builds bottom-to-top behind a traveling surface ripple.",
+    },
+  ]);
+  assert.deepEqual(materialization.motionVariants, [
+    {
+      id: "gentle-drift",
+      label: "Drift",
+      description: "Loops each point through a small seeded tangent-space ellipse.",
+    },
+    {
+      id: "orbital-current",
+      label: "Orbit",
+      description: "Carries points around the vertical axis in a gentle horizontal current.",
+    },
+    {
+      id: "surface-breathe",
+      label: "Breathe",
+      description: "Pulses points along their surface normals with a slow shared breath.",
+    },
+    {
+      id: "radial-ripple",
+      label: "Ripple",
+      description: "Sends repeating normal-offset rings across target radius.",
+    },
+    {
+      id: "helical-twist",
+      label: "Twist",
+      description: "Turns height-phased points around the model-space vertical axis.",
+    },
+    {
+      id: "tangent-flutter",
+      label: "Flutter",
+      description: "Traces a fine tangent-space Lissajous flutter around each point.",
+    },
+  ]);
+  assert.deepEqual(
+    shaderEffects.filter((effect) => effect.transitionVariants).map(({ id }) => id),
+    ["audio-reactive-materialization"],
+  );
+  assert.deepEqual(
+    shaderEffects.filter((effect) => effect.motionVariants).map(({ id }) => id),
+    ["audio-reactive-materialization"],
+  );
+
+  const copy = JSON.stringify(materialization);
+  assert.match(copy, /four reversible 3\.5-second transitions/i);
+  assert.match(copy, /six independent looping motions|six continuous point motions/i);
+  assert.match(copy, /organic arcs.+spiral vortex.+radial bloom.+traveling wave/is);
+  assert.match(copy, /drift.+orbit.+breathe.+ripple.+twist.+flutter/is);
+  assert.match(copy, /shared built-in and uploaded endpoints|same (?:built-in and uploaded )?endpoints/i);
+  assert.match(copy, /polished alpha-hashed surface/i);
+  assert.match(copy, /normal-offset sparks/i);
+  assert.match(copy, /uploaded GLB.+dense anchored point surface/i);
+  assert.match(copy, /extracted archival GLSL remains unchanged.+live TSL presentation intentionally departs/is);
+  assert.doesNotMatch(
+    copy,
+    /four-stage|four[- ]section|section by section|section threshold|particle lifetime|lifetime reset|reveal sections|section count/i,
+  );
+});
+
 test("catalog SEO copy is unique, bounded, connected, and serializable", async () => {
   const { shaderEffects } = await loadCatalog();
   const effectIds = new Set(shaderEffects.map((effect) => effect.id));

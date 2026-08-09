@@ -1,5 +1,7 @@
 import type * as THREE from "three";
 import type { WebGPURenderer } from "three/webgpu";
+import type { MaterializationMotionVariant } from "./materialization-motion";
+import type { MaterializationTransitionVariant } from "./materialization-transition-variants";
 
 export const EFFECT_IDS = [
   "aurora-field",
@@ -62,6 +64,10 @@ export interface EffectRuntimeContext {
   pointCloud?: MaterializationPointCloud | null;
   /** Static geometry source for the authored stylized point-field study. */
   pointTarget?: StylizedPointTarget;
+  /** Optional reversible journey used by the point-cloud materialization runtime. */
+  transitionVariant?: MaterializationTransitionVariant;
+  /** Optional looping point motion used by the point-cloud materialization runtime. */
+  motionVariant?: MaterializationMotionVariant;
 }
 
 export interface EffectInstance {
@@ -73,6 +79,8 @@ export interface EffectInstance {
   prepareRender?(): void;
   resize(width: number, height: number, dpr: number): void;
   setPreset(preset: string): void;
+  setTransitionVariant?(transitionVariant: MaterializationTransitionVariant): void;
+  setMotionVariant?(motionVariant: MaterializationMotionVariant, crossfade?: boolean): void;
   dispose(): void;
 }
 

@@ -17,6 +17,8 @@ import type {
   MaterializationPointCloud,
   StylizedPointTarget,
 } from "@/lib/effects/types";
+import type { MaterializationMotionVariant } from "@/lib/effects/materialization-motion";
+import type { MaterializationTransitionVariant } from "@/lib/effects/materialization-transition-variants";
 
 const defaultAudio: ShaderStageAudio = {
   level: 0.5,
@@ -51,12 +53,21 @@ const modelImportResultCodes = new Set([
 ]);
 
 export function EffectDetail({ effect }: { effect: ShaderEffectMeta }) {
+  const isOrganicMaterialization = effect.id === "audio-reactive-materialization";
   const isStylizedPointField = effect.id === "stylized-materialization";
   const [preset, setPreset] = useState(effect.presets[0]?.id ?? "default");
   const [paused, setPaused] = useState(false);
   const [quality, setQuality] = useState<ShaderStageQuality>("auto");
   const [rendererMode, setRendererMode] = useState<ShaderStageRenderer>("webgpu");
   const [restartKey, setRestartKey] = useState(0);
+  const [transitionVariant, setTransitionVariant] = useState<MaterializationTransitionVariant>(
+    effect.transitionVariants?.[0]?.id ?? "organic-arc",
+  );
+  const [transitionReplayToken, setTransitionReplayToken] = useState(0);
+  const [motionVariant, setMotionVariant] = useState<MaterializationMotionVariant>(
+    effect.motionVariants?.[0]?.id ?? "gentle-drift",
+  );
+  const [motionReplayToken, setMotionReplayToken] = useState(0);
   const [automaticAudio, setAutomaticAudio] = useState(true);
   const [audio, setAudio] = useState<ShaderStageAudio>(defaultAudio);
   const [pointCloud, setPointCloud] = useState<MaterializationPointCloud | null>(null);
@@ -113,6 +124,30 @@ export function EffectDetail({ effect }: { effect: ShaderEffectMeta }) {
   function selectPreset(candidateId: string) {
     setPreset(candidateId);
     trackEvent("preset_change", { effect_id: effect.id, preset_id: candidateId });
+  }
+
+  function selectTransitionVariant(candidateId: MaterializationTransitionVariant) {
+    const replayed = candidateId === transitionVariant;
+    setTransitionVariant(candidateId);
+    setPreset("materialize");
+    setPaused(false);
+    setTransitionReplayToken((value) => value + 1);
+    trackEvent("transition_change", {
+      effect_id: effect.id,
+      transition_id: candidateId,
+      replayed,
+    });
+  }
+
+  function selectMotionVariant(candidateId: MaterializationMotionVariant) {
+    const replayed = candidateId === motionVariant;
+    setMotionVariant(candidateId);
+    setMotionReplayToken((value) => value + 1);
+    trackEvent("motion_change", {
+      effect_id: effect.id,
+      motion_id: candidateId,
+      replayed,
+    });
   }
 
   function togglePlayback() {
@@ -281,6 +316,10 @@ export function EffectDetail({ effect }: { effect: ShaderEffectMeta }) {
           audio={hasAudio ? audio : silentAudio}
           pointCloud={pointCloud}
           pointTarget={isStylizedPointField ? pointTarget : undefined}
+          transitionVariant={effect.transitionVariants?.length ? transitionVariant : undefined}
+          transitionReplayToken={transitionReplayToken}
+          motionVariant={effect.motionVariants?.length ? motionVariant : undefined}
+          motionReplayToken={motionReplayToken}
           label={`${effect.name} interactive shader study`}
         />
         <div className="hero-grid" aria-hidden="true" />
@@ -313,8 +352,14 @@ export function EffectDetail({ effect }: { effect: ShaderEffectMeta }) {
               </button>
             ))}
           </div>
-          <div className="control-group" role="group" aria-label="Preset">
-            <span className="control-group__label">Preset</span>
+          <div
+            className="control-group"
+            role="group"
+            aria-label={isOrganicMaterialization ? "State" : "Preset"}
+          >
+            <span className="control-group__label">
+              {isOrganicMaterialization ? "State" : "Preset"}
+            </span>
             {effect.presets.map((candidate) => (
               <button
                 key={candidate.id}
@@ -328,6 +373,40 @@ export function EffectDetail({ effect }: { effect: ShaderEffectMeta }) {
               </button>
             ))}
           </div>
+          {effect.transitionVariants?.length ? (
+            <div className="control-group" role="group" aria-label="Transition">
+              <span className="control-group__label">Transition</span>
+              {effect.transitionVariants.map((candidate) => (
+                <button
+                  key={candidate.id}
+                  className={`control-button${candidate.id === transitionVariant ? " is-active" : ""}`}
+                  type="button"
+                  aria-pressed={candidate.id === transitionVariant}
+                  title={candidate.description}
+                  onClick={() => selectTransitionVariant(candidate.id)}
+                >
+                  {candidate.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          {effect.motionVariants?.length ? (
+            <div className="control-group" role="group" aria-label="Motion">
+              <span className="control-group__label">Motion</span>
+              {effect.motionVariants.map((candidate) => (
+                <button
+                  key={candidate.id}
+                  className={`control-button${candidate.id === motionVariant ? " is-active" : ""}`}
+                  type="button"
+                  aria-pressed={candidate.id === motionVariant}
+                  title={candidate.description}
+                  onClick={() => selectMotionVariant(candidate.id)}
+                >
+                  {candidate.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
           {isStylizedPointField ? (
             <div className="control-group" role="group" aria-label="Target">
               <span className="control-group__label">Target</span>
@@ -409,7 +488,9 @@ export function EffectDetail({ effect }: { effect: ShaderEffectMeta }) {
             <p>
               {isStylizedPointField
                 ? "This authored TSL study applies three visual languages directly to stable point targets: a base knot, seeded terrain, or a browser-local model."
-                : "The visual behavior and production defaults are retained in the TSL adaptation. Only application-specific orchestration and unlicensed model inputs were replaced, leaving a focused study that can be read independently of the original product."}
+                : isOrganicMaterialization
+                  ? "The extracted GLSL remains archived unchanged for provenance. The live TSL presentation combines four reversible 3.5-second transitions with six independent looping point motions and shared built-in and uploaded endpoints."
+                  : "The visual behavior and production defaults are retained in the TSL adaptation. Only application-specific orchestration and unlicensed model inputs were replaced, leaving a focused study that can be read independently of the original product."}
             </p>
             <p>
               This preview uses one managed WebGPU renderer with automatic WebGL2 fallback, a capped

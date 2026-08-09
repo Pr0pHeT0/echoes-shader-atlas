@@ -1,12 +1,15 @@
 import * as THREE from "three/webgpu";
 import {
   Fn,
+  cos,
+  cross,
   dot,
   instanceIndex,
   instancedArray,
   instancedBufferAttribute,
   length,
   max,
+  min,
   mix,
   modelViewMatrix,
   normalize,
@@ -23,6 +26,58 @@ import {
 } from "three/tsl";
 
 import { createSegmentedTorusKnot, seededValue } from "../geometry";
+import {
+  MATERIALIZATION_ARRIVAL_ARC_MAX,
+  MATERIALIZATION_ARRIVAL_ARC_MIN,
+  MATERIALIZATION_ARRIVAL_STAGGER,
+  MATERIALIZATION_ARRIVAL_WINDOW,
+  MATERIALIZATION_BLOOM_NORMAL_LIFT_MAX,
+  MATERIALIZATION_BLOOM_NORMAL_LIFT_MIN,
+  MATERIALIZATION_MAX_POINT_FLARE,
+  MATERIALIZATION_TRANSITION_VARIANTS,
+  MATERIALIZATION_VORTEX_TURNS_MAX,
+  MATERIALIZATION_VORTEX_TURNS_MIN,
+  MATERIALIZATION_WAVE_NORMAL_LIFT,
+  isMaterializationTransitionVariant,
+  materializationSpatialPhase,
+  materializationTransitionIndex,
+} from "../materialization-transition-variants";
+import type { MaterializationTransitionVariant } from "../materialization-transition-variants";
+import {
+  advanceMaterializationMotionCrossfade,
+  advanceMaterializationMotionPhase,
+  isMaterializationMotionVariant,
+  MATERIALIZATION_BREATHE_AMPLITUDE,
+  MATERIALIZATION_BREATHE_ANGULAR_SPEED,
+  MATERIALIZATION_DRIFT_AMPLITUDE_MAX,
+  MATERIALIZATION_DRIFT_AMPLITUDE_MIN,
+  MATERIALIZATION_DRIFT_ANGULAR_SPEED,
+  MATERIALIZATION_DRIFT_SECONDARY_RATIO,
+  MATERIALIZATION_FLUTTER_BITANGENT_AMPLITUDE,
+  MATERIALIZATION_FLUTTER_BITANGENT_SEED_SCALE,
+  MATERIALIZATION_FLUTTER_BITANGENT_SPEED,
+  MATERIALIZATION_FLUTTER_TANGENT_AMPLITUDE,
+  MATERIALIZATION_FLUTTER_TANGENT_SPEED,
+  MATERIALIZATION_MOTION_CROSSFADE_SECONDS,
+  MATERIALIZATION_MOTION_MAX_OFFSET,
+  MATERIALIZATION_MOTION_VARIANTS,
+  MATERIALIZATION_ORBIT_AMPLITUDE_MAX,
+  MATERIALIZATION_ORBIT_AMPLITUDE_MIN,
+  MATERIALIZATION_ORBIT_ANGULAR_SPEED,
+  MATERIALIZATION_RIPPLE_AMPLITUDE,
+  MATERIALIZATION_RIPPLE_ANGULAR_SPEED,
+  MATERIALIZATION_RIPPLE_RING_COUNT,
+  MATERIALIZATION_TWIST_AMPLITUDE,
+  MATERIALIZATION_TWIST_ANGULAR_SPEED,
+  materializationMotionIndex,
+} from "../materialization-motion";
+import type { MaterializationMotionVariant } from "../materialization-motion";
+import {
+  advanceMaterializationProgress,
+  initialMaterializationProgress,
+  materializationTarget,
+} from "../materialization-transition";
+import type { MaterializationProgressTarget } from "../materialization-transition";
 import { EFFECT_PRESETS, MATERIALIZATION_DEFAULTS } from "../runtime-config";
 import {
   clampDpr,
@@ -38,10 +93,53 @@ import type {
 } from "../types";
 
 const PRESETS = EFFECT_PRESETS["audio-reactive-materialization"];
-const SECTION_COUNT = 4;
+const SURFACE_FADE_START = 0.62;
+const SURFACE_FADE_END = 0.94;
+const LIVE_POINT_SCALE = 1.4;
+const SETTLED_SHELL_SCALE = 0.45;
+const SETTLED_SPARK_SCALE = 0.28;
+const SETTLED_SPARK_LIFT = 0.018;
+const SPATIAL_SEED_MIX = 0.15;
 
 type FloatNode = THREE.Node<"float">;
 type Vec3Node = THREE.Node<"vec3">;
+
+function makeSpatialPhases(
+  positions: Float32Array,
+  arrivalSeeds: Float32Array,
+): { height: Float32Array; radius: Float32Array } {
+  let minHeight = Number.POSITIVE_INFINITY;
+  let maxHeight = Number.NEGATIVE_INFINITY;
+  let minRadius = Number.POSITIVE_INFINITY;
+  let maxRadius = Number.NEGATIVE_INFINITY;
+  const radii = new Float32Array(arrivalSeeds.length);
+
+  for (let index = 0; index < arrivalSeeds.length; index += 1) {
+    const offset = index * 3;
+    const x = positions[offset];
+    const y = positions[offset + 1];
+    const z = positions[offset + 2];
+    const radius = Math.hypot(x, y, z);
+    radii[index] = radius;
+    minHeight = Math.min(minHeight, y);
+    maxHeight = Math.max(maxHeight, y);
+    minRadius = Math.min(minRadius, radius);
+    maxRadius = Math.max(maxRadius, radius);
+  }
+
+  const height = new Float32Array(arrivalSeeds.length);
+  const radius = new Float32Array(arrivalSeeds.length);
+  for (let index = 0; index < arrivalSeeds.length; index += 1) {
+    const seed = arrivalSeeds[index];
+    height[index] = materializationSpatialPhase(
+      positions[index * 3 + 1],
+      minHeight,
+      maxHeight,
+    ) ?? seed;
+    radius[index] = materializationSpatialPhase(radii[index], minRadius, maxRadius) ?? seed;
+  }
+  return { height, radius };
+}
 
 function makeInstancedSprite(material: THREE.PointsNodeMaterial, count: number): THREE.Sprite {
   // Sprite's public type has not yet caught up with its runtime NodeMaterial support.
@@ -107,8 +205,10 @@ class MaterializationRuntime implements EffectInstance {
   private readonly sectionMaterials: THREE.Material[] = [];
   private readonly sectionGeometries: THREE.BufferGeometry[] = [];
   private readonly particles: THREE.StorageBufferNode<"vec4">;
+  private readonly initialParticles: THREE.StorageBufferNode<"vec4">;
   private readonly base: THREE.StorageBufferNode<"vec4">;
   private readonly computeNode: THREE.ComputeNode;
+  private readonly resetComputeNode: THREE.ComputeNode;
 
   private readonly time = uniform(0);
   private readonly deltaTime = uniform(0);
@@ -137,7 +237,13 @@ class MaterializationRuntime implements EffectInstance {
   private readonly audioFlowStrength = uniform(MATERIALIZATION_DEFAULTS.audioFlowStrength);
   private readonly returnEnabled = uniform(1);
   private readonly returnStrength = uniform(MATERIALIZATION_DEFAULTS.returnStrength);
-  private readonly materializedSectionCount = uniform(0);
+  private readonly coalescenceProgress = uniform(0);
+  private readonly transitionVariantIndex = uniform(0);
+  private readonly previousMotionVariantIndex = uniform(0);
+  private readonly motionVariantIndex = uniform(0);
+  private readonly previousMotionPhase = uniform(0);
+  private readonly motionPhase = uniform(0);
+  private readonly motionCrossfadeProgress = uniform(1);
   private readonly bassRadialEnabled = uniform(0);
   private readonly bassRadialPhase = uniform(MATERIALIZATION_DEFAULTS.bassRadialPhase);
   private readonly bassRadialStrength = uniform(MATERIALIZATION_DEFAULTS.bassRadialStrength);
@@ -145,14 +251,34 @@ class MaterializationRuntime implements EffectInstance {
   private readonly trebleSizeStrength = uniform(MATERIALIZATION_DEFAULTS.trebleSizeStrength);
   private readonly pointSize: FloatNode;
 
-  private currentPreset: (typeof PRESETS)[number] = "materialize";
-  private lastElapsed = 0;
-  private presetStartedAt = 0;
-  private presetStartPending = false;
+  private currentPreset: (typeof PRESETS)[number] = "dormant";
+  private currentTransitionVariant: MaterializationTransitionVariant =
+    MATERIALIZATION_TRANSITION_VARIANTS[0];
+  private currentMotionVariant: MaterializationMotionVariant = MATERIALIZATION_MOTION_VARIANTS[0];
+  private transitionProgress = 0;
+  private transitionTarget: MaterializationProgressTarget = 0;
+  private previousMotionPhaseSeconds = 0;
+  private motionPhaseSeconds = 0;
+  private motionCrossfadeProgressValue = 1;
+  private pendingMotionVariant: MaterializationMotionVariant | null = null;
+  private resetPending = false;
 
   constructor(context: EffectRuntimeContext) {
     this.renderer = context.renderer;
     this.reducedMotion = context.reducedMotion;
+    this.currentTransitionVariant = isMaterializationTransitionVariant(context.transitionVariant)
+      ? context.transitionVariant
+      : MATERIALIZATION_TRANSITION_VARIANTS[0];
+    this.currentMotionVariant = isMaterializationMotionVariant(context.motionVariant)
+      ? context.motionVariant
+      : MATERIALIZATION_MOTION_VARIANTS[0];
+    this.transitionVariantIndex.value = materializationTransitionIndex(
+      this.currentTransitionVariant,
+    );
+    this.previousMotionVariantIndex.value = materializationMotionIndex(
+      this.currentMotionVariant,
+    );
+    this.motionVariantIndex.value = materializationMotionIndex(this.currentMotionVariant);
     ({ scene: this.scene, camera: this.camera } = makeShowcaseScene(
       context.width,
       context.height,
@@ -168,14 +294,16 @@ class MaterializationRuntime implements EffectInstance {
     const uploaded = context.pointCloud
       && context.pointCloud.count > 0
       && context.pointCloud.positions.length >= context.pointCloud.count * 3
+      && context.pointCloud.normals.length >= context.pointCloud.count * 3
+      && context.pointCloud.tangents.length >= context.pointCloud.count * 3
       && context.pointCloud.colors.length >= context.pointCloud.count * 3
-      && context.pointCloud.sections.length >= context.pointCloud.count
       ? context.pointCloud
       : null;
     const knot = uploaded ? null : createSegmentedTorusKnot(count);
     const targetPositions = uploaded ? new Float32Array(count * 3) : knot!.positions;
+    const targetNormals = uploaded ? new Float32Array(count * 3) : knot!.normals;
+    const targetTangents = uploaded ? new Float32Array(count * 3) : knot!.tangents;
     const targetColors = uploaded ? new Float32Array(count * 3) : knot!.colors;
-    const targetSections = uploaded ? new Float32Array(count) : knot!.particleSections;
     if (uploaded) {
       for (let index = 0; index < count; index += 1) {
         const sourceIndex = index % uploaded.count;
@@ -184,16 +312,22 @@ class MaterializationRuntime implements EffectInstance {
         targetPositions[targetOffset] = uploaded.positions[sourceOffset];
         targetPositions[targetOffset + 1] = uploaded.positions[sourceOffset + 1];
         targetPositions[targetOffset + 2] = uploaded.positions[sourceOffset + 2];
+        targetNormals[targetOffset] = uploaded.normals[sourceOffset];
+        targetNormals[targetOffset + 1] = uploaded.normals[sourceOffset + 1];
+        targetNormals[targetOffset + 2] = uploaded.normals[sourceOffset + 2];
+        targetTangents[targetOffset] = uploaded.tangents[sourceOffset];
+        targetTangents[targetOffset + 1] = uploaded.tangents[sourceOffset + 1];
+        targetTangents[targetOffset + 2] = uploaded.tangents[sourceOffset + 2];
         targetColors[targetOffset] = uploaded.colors[sourceOffset];
         targetColors[targetOffset + 1] = uploaded.colors[sourceOffset + 1];
         targetColors[targetOffset + 2] = uploaded.colors[sourceOffset + 2];
-        targetSections[index] = THREE.MathUtils.clamp(Math.floor(uploaded.sections[sourceIndex]), 0, 3);
       }
     }
 
     const baseData = new Float32Array(count * 4);
     const particleData = new Float32Array(count * 4);
     const sizes = new Float32Array(count);
+    const arrivalSeeds = new Float32Array(count);
     for (let index = 0; index < count; index += 1) {
       const positionOffset = index * 3;
       const storageOffset = index * 4;
@@ -202,23 +336,39 @@ class MaterializationRuntime implements EffectInstance {
         baseData[storageOffset + channel] = value;
         particleData[storageOffset + channel] = value;
       }
-      if (uploaded) {
-        const azimuth = seededValue(index, 71) * Math.PI * 2;
-        const vertical = seededValue(index, 73) * 2 - 1;
-        const horizontal = Math.sqrt(Math.max(0, 1 - vertical * vertical));
-        const radius = 0.65 + seededValue(index, 79) * 1.35;
-        particleData[storageOffset] += Math.cos(azimuth) * horizontal * radius;
-        particleData[storageOffset + 1] += vertical * radius;
-        particleData[storageOffset + 2] += Math.sin(azimuth) * horizontal * radius;
-      }
+      const azimuth = seededValue(index, 71) * Math.PI * 2;
+      const vertical = seededValue(index, 73) * 2 - 1;
+      const horizontal = Math.sqrt(Math.max(0, 1 - vertical * vertical));
+      const radius = 0.65 + seededValue(index, 79) * 1.35;
+      particleData[storageOffset] += Math.cos(azimuth) * horizontal * radius;
+      particleData[storageOffset + 1] += vertical * radius;
+      particleData[storageOffset + 2] += Math.sin(azimuth) * horizontal * radius;
       const lifetime = seededValue(index, 41);
       baseData[storageOffset + 3] = lifetime;
       particleData[storageOffset + 3] = lifetime;
       sizes[index] = seededValue(index, 43);
+      arrivalSeeds[index] = seededValue(index, 83);
+    }
+    const spatialPhases = makeSpatialPhases(targetPositions, arrivalSeeds);
+    const particleTraits = new Float32Array(count * 4);
+    for (let index = 0; index < count; index += 1) {
+      const offset = index * 4;
+      particleTraits[offset] = sizes[index];
+      particleTraits[offset + 1] = arrivalSeeds[index];
+      particleTraits[offset + 2] = spatialPhases.height[index];
+      particleTraits[offset + 3] = spatialPhases.radius[index];
     }
 
     this.particles = instancedArray(particleData, "vec4").setName("MaterializationParticles");
+    this.initialParticles = instancedArray(particleData.slice(), "vec4")
+      .setName("MaterializationInitialParticles")
+      .toReadOnly();
     this.base = instancedArray(baseData, "vec4").setName("MaterializationBase").toReadOnly();
+
+    this.resetComputeNode = Fn(() => {
+      const particleElement = this.particles.element(instanceIndex);
+      particleElement.assign(vec4(this.initialParticles.element(instanceIndex)));
+    })().compute(count, [64]).setName("Materialization deterministic scatter reset");
 
     this.computeNode = Fn(() => {
       const particleElement = this.particles.element(instanceIndex);
@@ -289,33 +439,275 @@ class MaterializationRuntime implements EffectInstance {
       new THREE.InstancedBufferAttribute(targetColors, 3),
       "vec3",
     );
-    const particleSize = instancedBufferAttribute<"float">(
-      new THREE.InstancedBufferAttribute(sizes, 1),
-      "float",
+    const particleTrait = instancedBufferAttribute<"vec4">(
+      new THREE.InstancedBufferAttribute(particleTraits, 4),
+      "vec4",
     );
-    const particleSection = instancedBufferAttribute<"float">(
-      new THREE.InstancedBufferAttribute(targetSections, 1),
-      "float",
+    const targetPosition = instancedBufferAttribute<"vec3">(
+      new THREE.InstancedBufferAttribute(targetPositions, 3),
+      "vec3",
     );
-    const distance = length(particle.xyz);
-    const direction = normalize(particle.xyz.add(vec3(1e-7)));
+    const targetNormal = instancedBufferAttribute<"vec3">(
+      new THREE.InstancedBufferAttribute(targetNormals, 3),
+      "vec3",
+    );
+    const targetTangent = instancedBufferAttribute<"vec3">(
+      new THREE.InstancedBufferAttribute(targetTangents, 3),
+      "vec3",
+    );
+    const particleSize = particleTrait.x;
+    const arrivalSeed = particleTrait.y;
+    const heightPhase = particleTrait.z;
+    const radialPhase = particleTrait.w;
+    const bloomArrivalOrder = mix(radialPhase, arrivalSeed, SPATIAL_SEED_MIX);
+    const waveArrivalOrder = mix(heightPhase, arrivalSeed, SPATIAL_SEED_MIX);
+    const arrivalOrder = this.transitionVariantIndex.lessThan(1.5).select(
+      arrivalSeed,
+      this.transitionVariantIndex.lessThan(2.5).select(bloomArrivalOrder, waveArrivalOrder),
+    );
+    const arrivalStart = arrivalOrder.mul(MATERIALIZATION_ARRIVAL_STAGGER);
+    const arrival = smoothstep(
+      arrivalStart,
+      arrivalStart.add(MATERIALIZATION_ARRIVAL_WINDOW),
+      this.coalescenceProgress,
+    );
+    const arrivalEnvelope = sin(arrival.mul(Math.PI));
+    const tangentCross = cross(targetNormal, targetTangent);
+    const bitangent = tangentCross.div(max(length(tangentCross), 1e-7));
+    const arcAngle = arrivalSeed.mul(Math.PI * 2);
+    const arcDirection = targetTangent.mul(cos(arcAngle)).add(bitangent.mul(sin(arcAngle)));
+    const arcStrength = mix(
+      MATERIALIZATION_ARRIVAL_ARC_MIN,
+      MATERIALIZATION_ARRIVAL_ARC_MAX,
+      arrivalSeed,
+    )
+      .mul(arrivalEnvelope);
+    const linearPosition = mix(particle.xyz, targetPosition, arrival);
+    const organicPosition = linearPosition
+      .add(arcDirection.mul(arcStrength));
+
+    const vortexTurns = mix(
+      MATERIALIZATION_VORTEX_TURNS_MIN,
+      MATERIALIZATION_VORTEX_TURNS_MAX,
+      arrivalSeed,
+    );
+    const vortexAngle = arrival.mul(vortexTurns).mul(Math.PI * 2);
+    const vortexCosine = cos(vortexAngle);
+    const vortexSine = sin(vortexAngle);
+    const vortexSource = vec3(
+      particle.x.mul(vortexCosine).sub(particle.z.mul(vortexSine)),
+      particle.y,
+      particle.x.mul(vortexSine).add(particle.z.mul(vortexCosine)),
+    );
+    const vortexPosition = mix(vortexSource, targetPosition, arrival);
+
+    const bloomNormalLift = mix(
+      MATERIALIZATION_BLOOM_NORMAL_LIFT_MIN,
+      MATERIALIZATION_BLOOM_NORMAL_LIFT_MAX,
+      arrivalSeed,
+    ).mul(arrivalEnvelope);
+    const bloomPosition = linearPosition.add(targetNormal.mul(bloomNormalLift));
+
+    const wavePhaseAngle = heightPhase.mul(Math.PI * 2).sub(arrival.mul(Math.PI * 2));
+    const waveOscillation = sin(wavePhaseAngle);
+    const waveCrest = max(waveOscillation, 0).mul(arrivalEnvelope);
+    const wavePosition = linearPosition.add(
+      targetNormal
+        .mul(waveOscillation)
+        .mul(arrivalEnvelope)
+        .mul(MATERIALIZATION_WAVE_NORMAL_LIFT),
+    );
+    const convergencePosition = this.transitionVariantIndex.lessThan(0.5).select(
+      organicPosition,
+      this.transitionVariantIndex.lessThan(1.5).select(
+        vortexPosition,
+        this.transitionVariantIndex.lessThan(2.5).select(bloomPosition, wavePosition),
+      ),
+    );
+    const surfaceMix = smoothstep(
+      SURFACE_FADE_START,
+      SURFACE_FADE_END,
+      this.coalescenceProgress,
+    );
+
+    const continuousMotionOffset = (
+      variantIndex: FloatNode,
+      phase: FloatNode,
+    ): Vec3Node => {
+      const seededAngle = arrivalSeed.mul(Math.PI * 2);
+      const motionNormal = targetNormal.div(max(length(targetNormal), 1e-7));
+      const motionTangent = targetTangent.div(max(length(targetTangent), 1e-7));
+
+      const driftAmplitude = mix(
+        MATERIALIZATION_DRIFT_AMPLITUDE_MIN,
+        MATERIALIZATION_DRIFT_AMPLITUDE_MAX,
+        arrivalSeed,
+      );
+      const driftAngle = phase.mul(MATERIALIZATION_DRIFT_ANGULAR_SPEED).add(seededAngle);
+      const driftOffset = motionTangent
+        .mul(cos(driftAngle))
+        .mul(driftAmplitude)
+        .add(
+          bitangent
+            .mul(sin(driftAngle))
+            .mul(driftAmplitude)
+            .mul(MATERIALIZATION_DRIFT_SECONDARY_RATIO),
+        );
+
+      const horizontalRadius = vec3(targetPosition.x, 0, targetPosition.z);
+      const horizontalRadiusLength = length(horizontalRadius);
+      const horizontalRadial = horizontalRadius.div(max(horizontalRadiusLength, 1e-7));
+      const orbitTangent = vec3(horizontalRadial.z.negate(), 0, horizontalRadial.x);
+      const horizontalTargetTangent = vec3(motionTangent.x, 0, motionTangent.z);
+      const fallbackOrbitTangent = horizontalTargetTangent.div(
+        max(length(horizontalTargetTangent), 1e-7),
+      );
+      const safeOrbitTangent = horizontalRadiusLength.greaterThan(1e-7).select(
+        orbitTangent,
+        fallbackOrbitTangent,
+      );
+      const orbitAmplitude = mix(
+        MATERIALIZATION_ORBIT_AMPLITUDE_MIN,
+        MATERIALIZATION_ORBIT_AMPLITUDE_MAX,
+        arrivalSeed,
+      );
+      const orbitAngle = phase.mul(MATERIALIZATION_ORBIT_ANGULAR_SPEED).add(seededAngle);
+      const orbitOffset = horizontalRadial
+        .mul(sin(orbitAngle))
+        .add(safeOrbitTangent.mul(cos(orbitAngle)))
+        .mul(orbitAmplitude);
+
+      const breatheOffset = motionNormal
+        .mul(sin(phase.mul(MATERIALIZATION_BREATHE_ANGULAR_SPEED).add(seededAngle)))
+        .mul(MATERIALIZATION_BREATHE_AMPLITUDE);
+      const rippleOffset = motionNormal
+        .mul(sin(
+          radialPhase
+            .mul(Math.PI * 2 * MATERIALIZATION_RIPPLE_RING_COUNT)
+            .sub(phase.mul(MATERIALIZATION_RIPPLE_ANGULAR_SPEED)),
+        ))
+        .mul(MATERIALIZATION_RIPPLE_AMPLITUDE);
+      const twistOffset = safeOrbitTangent
+        .mul(sin(
+          phase
+            .mul(MATERIALIZATION_TWIST_ANGULAR_SPEED)
+            .add(heightPhase.mul(Math.PI * 2)),
+        ))
+        .mul(MATERIALIZATION_TWIST_AMPLITUDE);
+      const flutterOffset = motionTangent
+        .mul(sin(phase.mul(MATERIALIZATION_FLUTTER_TANGENT_SPEED).add(seededAngle)))
+        .mul(MATERIALIZATION_FLUTTER_TANGENT_AMPLITUDE)
+        .add(
+          bitangent
+            .mul(sin(
+              phase
+                .mul(MATERIALIZATION_FLUTTER_BITANGENT_SPEED)
+                .add(seededAngle.mul(MATERIALIZATION_FLUTTER_BITANGENT_SEED_SCALE)),
+            ))
+            .mul(MATERIALIZATION_FLUTTER_BITANGENT_AMPLITUDE),
+        );
+
+      return variantIndex.lessThan(0.5).select(
+        driftOffset,
+        variantIndex.lessThan(1.5).select(
+          orbitOffset,
+          variantIndex.lessThan(2.5).select(
+            breatheOffset,
+            variantIndex.lessThan(3.5).select(
+              rippleOffset,
+              variantIndex.lessThan(4.5).select(twistOffset, flutterOffset),
+            ),
+          ),
+        ),
+      ) as Vec3Node;
+    };
+
+    const previousMotionOffset = continuousMotionOffset(
+      this.previousMotionVariantIndex,
+      this.previousMotionPhase,
+    );
+    const currentMotionOffset = continuousMotionOffset(
+      this.motionVariantIndex,
+      this.motionPhase,
+    );
+    const motionCrossfadeMix = smoothstep(0, 1, this.motionCrossfadeProgress);
+    const blendedMotionOffset = mix(
+      previousMotionOffset,
+      currentMotionOffset,
+      motionCrossfadeMix,
+    );
+    const continuousMotionScale = min(
+      1,
+      max(length(blendedMotionOffset), 1e-7)
+        .reciprocal()
+        .mul(MATERIALIZATION_MOTION_MAX_OFFSET),
+    );
+    const continuousMotion = blendedMotionOffset
+      .mul(continuousMotionScale)
+      .mul(surfaceMix.oneMinus())
+      .mul(this.reducedMotion ? 0 : 1);
+    const liftedPosition = convergencePosition.add(continuousMotion).add(
+      targetNormal.mul(surfaceMix).mul(SETTLED_SPARK_LIFT),
+    );
+    const distance = length(liftedPosition);
+    const direction = normalize(liftedPosition.add(vec3(1e-7)));
     const radialStrength = sin(distance.mul(10).sub(this.bass.mul(this.bassRadialPhase)))
       .mul(this.bass)
       .mul(this.bassRadialStrength)
       .mul(this.shaderEnabled)
       .mul(this.bassRadialEnabled);
-    const displayPosition = particle.xyz.add(direction.mul(radialStrength));
+    const displayPosition = liftedPosition.add(direction.mul(radialStrength));
     const fogDepth = varying(modelViewMatrix.mul(vec4(displayPosition, 1)).z.negate());
-    const sectionVisible = particleSection.greaterThanEqual(this.materializedSectionCount);
     const trebleScale = this.treble
       .mul(this.trebleSizeStrength)
       .mul(this.shaderEnabled)
       .mul(this.trebleSizeEnabled)
       .add(1);
+    const organicFlare = arrivalEnvelope.mul(MATERIALIZATION_MAX_POINT_FLARE - 1).add(1);
+    const vortexFlare = arrivalEnvelope.mul(0.32).add(1);
+    const bloomFlare = arrivalEnvelope.mul(MATERIALIZATION_MAX_POINT_FLARE - 1).add(1);
+    const waveFlare = waveCrest.mul(0.4).add(arrivalEnvelope.mul(0.08)).add(1);
+    const transientFlare = this.transitionVariantIndex.lessThan(0.5).select(
+      organicFlare,
+      this.transitionVariantIndex.lessThan(1.5).select(
+        vortexFlare,
+        this.transitionVariantIndex.lessThan(2.5).select(bloomFlare, waveFlare),
+      ),
+    );
     const displaySize = mix(0.65, 1, particleSize)
       .mul(this.pointSize)
       .mul(trebleScale)
-      .mul(2);
+      .mul(transientFlare)
+      .mul(mix(1, SETTLED_SPARK_SCALE, surfaceMix))
+      .mul(LIVE_POINT_SCALE);
+    const transientAccent = this.transitionVariantIndex.lessThan(0.5).select(
+      vec3(0.78, 0.96, 1),
+      this.transitionVariantIndex.lessThan(1.5).select(
+        vec3(0.72, 0.58, 1),
+        this.transitionVariantIndex.lessThan(2.5).select(
+          vec3(0.9, 1, 1),
+          vec3(0.45, 0.94, 1),
+        ),
+      ),
+    );
+    const transientAccentStrength = this.transitionVariantIndex.lessThan(0.5).select(
+      arrivalEnvelope.mul(0.42),
+      this.transitionVariantIndex.lessThan(1.5).select(
+        arrivalEnvelope.mul(0.36),
+        this.transitionVariantIndex.lessThan(2.5).select(
+          arrivalEnvelope.mul(0.48),
+          waveCrest.mul(0.44).add(arrivalEnvelope.mul(0.08)),
+        ),
+      ),
+    );
+    const animatedColor = mix(particleColor, transientAccent, transientAccentStrength);
+    const displayColor = mix(
+      animatedColor,
+      particleColor,
+      surfaceMix,
+    ).add(
+      vec3(0.78, 0.96, 1).sub(particleColor).mul(surfaceMix.mul(0.12)),
+    );
 
     this.material = new THREE.PointsNodeMaterial({
       transparent: true,
@@ -325,69 +717,59 @@ class MaterializationRuntime implements EffectInstance {
       fog: false,
     });
     this.material.positionNode = displayPosition;
-    this.material.sizeNode = sectionVisible.select(displaySize, 0);
-    this.material.fragmentNode = sphereFragment(particleColor, fogDepth);
+    this.material.sizeNode = displaySize;
+    this.material.fragmentNode = sphereFragment(displayColor, fogDepth);
     this.points = makeInstancedSprite(this.material, count);
+    this.points.renderOrder = 2;
     this.group.add(this.points);
 
     if (uploaded) {
-      const sectionPositions: number[][] = [[], [], [], []];
-      const sectionColors: number[][] = [[], [], [], []];
-      for (let index = 0; index < count; index += 1) {
-        const section = targetSections[index];
-        const offset = index * 3;
-        sectionPositions[section].push(
-          targetPositions[offset],
-          targetPositions[offset + 1],
-          targetPositions[offset + 2],
-        );
-        sectionColors[section].push(
-          targetColors[offset],
-          targetColors[offset + 1],
-          targetColors[offset + 2],
-        );
-      }
-      sectionPositions.forEach((positions, index) => {
-        const positionsArray = new Float32Array(positions);
-        const colorsArray = new Float32Array(sectionColors[index]);
-        const positionNode = instancedBufferAttribute<"vec3">(
-          new THREE.InstancedBufferAttribute(positionsArray, 3),
-          "vec3",
-        );
-        const colorNode = instancedBufferAttribute<"vec3">(
-          new THREE.InstancedBufferAttribute(colorsArray, 3),
-          "vec3",
-        );
-        const material = new THREE.PointsNodeMaterial({
-          transparent: true,
-          depthWrite: true,
-          depthTest: true,
-          fog: true,
-        });
-        material.positionNode = positionNode;
-        material.sizeNode = uniform(pointSize * 0.64);
-        material.fragmentNode = vec4(colorNode, 0.96);
-        const points = makeInstancedSprite(material, positionsArray.length / 3);
-        points.visible = false;
-        this.sectionMeshes.push(points);
-        this.sectionMaterials.push(material);
-        this.sectionGeometries.push(points.geometry);
-        this.group.add(points);
+      const positionNode = instancedBufferAttribute<"vec3">(
+        new THREE.InstancedBufferAttribute(targetPositions, 3),
+        "vec3",
+      );
+      const colorNode = instancedBufferAttribute<"vec3">(
+        new THREE.InstancedBufferAttribute(targetColors, 3),
+        "vec3",
+      );
+      const shellFogDepth = varying(modelViewMatrix.mul(vec4(positionNode, 1)).z.negate());
+      const material = new THREE.PointsNodeMaterial({
+        transparent: true,
+        depthWrite: false,
+        depthTest: true,
+        fog: false,
       });
+      material.positionNode = positionNode;
+      material.sizeNode = uniform(pointSize * SETTLED_SHELL_SCALE);
+      material.fragmentNode = sphereFragment(
+        colorNode,
+        shellFogDepth,
+        surfaceMix.mul(0.96),
+      );
+      const points = makeInstancedSprite(material, count);
+      points.renderOrder = 0;
+      this.sectionMeshes.push(points);
+      this.sectionMaterials.push(material);
+      this.sectionGeometries.push(points.geometry);
+      this.group.add(points);
     } else {
       const sectionColors = [0x1edbff, 0x45c7ef, 0x6d8cf1, 0x805cff];
       knot!.sections.forEach((section, index) => {
         const geometry = new THREE.BufferGeometry();
         geometry.setAttribute("position", new THREE.BufferAttribute(section.positions, 3));
         geometry.setAttribute("normal", new THREE.BufferAttribute(section.normals, 3));
-        const material = new THREE.MeshStandardMaterial({
+        const material = new THREE.MeshStandardNodeMaterial({
           color: sectionColors[index],
           roughness: 0.34,
           metalness: 0.5,
           side: THREE.DoubleSide,
+          depthWrite: true,
+          depthTest: true,
         });
+        material.alphaHash = true;
+        material.opacityNode = surfaceMix;
         const mesh = new THREE.Mesh(geometry, material);
-        mesh.visible = false;
+        mesh.renderOrder = 0;
         this.sectionMeshes.push(mesh);
         this.sectionMaterials.push(material);
         this.sectionGeometries.push(geometry);
@@ -396,32 +778,99 @@ class MaterializationRuntime implements EffectInstance {
     }
     this.scene.add(this.group);
     this.resize(context.width, context.height, context.dpr);
-    this.setPreset("materialize");
+    this.setPreset("dormant");
   }
 
-  private setMaterializedSectionCount(count: number): void {
-    const safeCount = THREE.MathUtils.clamp(Math.floor(count), 0, SECTION_COUNT);
-    this.materializedSectionCount.value = safeCount;
-    this.sectionMeshes.forEach((mesh, index) => { mesh.visible = index < safeCount; });
+  private syncMotionUniforms(): void {
+    this.previousMotionPhase.value = this.previousMotionPhaseSeconds;
+    this.motionPhase.value = this.motionPhaseSeconds;
+    this.motionCrossfadeProgress.value = this.motionCrossfadeProgressValue;
+  }
+
+  private beginMotionCrossfade(motionVariant: MaterializationMotionVariant): void {
+    this.previousMotionVariantIndex.value = this.motionVariantIndex.value;
+    this.previousMotionPhaseSeconds = this.motionPhaseSeconds;
+    this.motionVariantIndex.value = materializationMotionIndex(motionVariant);
+    this.motionPhaseSeconds = 0;
+    this.motionCrossfadeProgressValue = 0;
+  }
+
+  private advanceContinuousMotion(activeDelta: number): void {
+    let remainingDelta = activeDelta;
+
+    while (remainingDelta > 0) {
+      if (this.motionCrossfadeProgressValue >= 1) {
+        if (this.pendingMotionVariant) {
+          const pendingMotionVariant = this.pendingMotionVariant;
+          this.pendingMotionVariant = null;
+          this.beginMotionCrossfade(pendingMotionVariant);
+          continue;
+        }
+
+        this.previousMotionPhaseSeconds = advanceMaterializationMotionPhase(
+          this.previousMotionPhaseSeconds,
+          remainingDelta,
+        );
+        this.motionPhaseSeconds = advanceMaterializationMotionPhase(
+          this.motionPhaseSeconds,
+          remainingDelta,
+        );
+        remainingDelta = 0;
+        continue;
+      }
+
+      const secondsToCompletion = (
+        1 - this.motionCrossfadeProgressValue
+      ) * MATERIALIZATION_MOTION_CROSSFADE_SECONDS;
+      const step = Math.min(remainingDelta, secondsToCompletion);
+      this.previousMotionPhaseSeconds = advanceMaterializationMotionPhase(
+        this.previousMotionPhaseSeconds,
+        step,
+      );
+      this.motionPhaseSeconds = advanceMaterializationMotionPhase(
+        this.motionPhaseSeconds,
+        step,
+      );
+      this.motionCrossfadeProgressValue = advanceMaterializationMotionCrossfade(
+        this.motionCrossfadeProgressValue,
+        step,
+      );
+      remainingDelta -= step;
+
+      if (this.motionCrossfadeProgressValue >= 1 && this.pendingMotionVariant) {
+        const pendingMotionVariant = this.pendingMotionVariant;
+        this.pendingMotionVariant = null;
+        this.beginMotionCrossfade(pendingMotionVariant);
+      }
+    }
+
+    this.syncMotionUniforms();
   }
 
   update(frame: EffectFrame): void {
-    this.lastElapsed = frame.elapsed;
-    if (this.presetStartPending) {
-      this.presetStartedAt = frame.elapsed;
-      this.presetStartPending = false;
+    if (this.resetPending) {
+      this.renderer.compute(this.resetComputeNode);
+      this.resetPending = false;
     }
-    const localElapsed = Math.max(0, frame.elapsed - this.presetStartedAt);
-    if (this.currentPreset === "materialize") {
-      this.setMaterializedSectionCount(this.reducedMotion ? SECTION_COUNT : Math.floor(localElapsed * 1.15));
-    } else if (this.currentPreset === "dissolve") {
-      this.setMaterializedSectionCount(this.reducedMotion ? 0 : SECTION_COUNT - Math.floor(localElapsed * 1.15));
-    }
+    const activeMotionDelta = this.reducedMotion || frame.static
+      ? 0
+      : Math.max(0, Number.isFinite(frame.delta) ? frame.delta : 0);
+    this.advanceContinuousMotion(activeMotionDelta);
+    this.transitionProgress = advanceMaterializationProgress(
+      this.transitionProgress,
+      this.transitionTarget,
+      frame.delta,
+      this.reducedMotion,
+    );
+    this.coalescenceProgress.value = this.transitionProgress;
     const shaderTime = this.reducedMotion ? 0 : frame.elapsed;
     const delta = this.reducedMotion ? 0 : Math.min(Math.max(frame.delta, 0), 0.05);
     this.time.value = shaderTime;
     this.deltaTime.value = delta;
-    if (delta > 0 && this.shaderEnabled.value > 0) this.renderer.compute(this.computeNode);
+    const fullySettled = this.transitionProgress >= 1 && this.transitionTarget >= 1;
+    if (delta > 0 && this.shaderEnabled.value > 0 && !fullySettled) {
+      this.renderer.compute(this.computeNode);
+    }
     this.group.rotation.y = shaderTime * 0.1;
     this.group.rotation.x = Math.sin(shaderTime * 0.23) * 0.08;
   }
@@ -433,22 +882,88 @@ class MaterializationRuntime implements EffectInstance {
     this.camera.updateProjectionMatrix();
   }
 
+  setTransitionVariant(transitionVariant: MaterializationTransitionVariant): void {
+    if (!isMaterializationTransitionVariant(transitionVariant)) return;
+    this.currentTransitionVariant = transitionVariant;
+    this.transitionVariantIndex.value = materializationTransitionIndex(transitionVariant);
+    this.currentPreset = "materialize";
+    this.transitionTarget = 1;
+    this.transitionProgress = this.reducedMotion ? 1 : 0;
+    this.coalescenceProgress.value = this.transitionProgress;
+    this.shaderEnabled.value = 1;
+    this.flowEnabled.value = 1;
+    this.flowFieldStrength.value = MATERIALIZATION_DEFAULTS.flowFieldStrength;
+    this.resetPending = !this.reducedMotion;
+  }
+
+  setMotionVariant(
+    motionVariant: MaterializationMotionVariant,
+    crossfade = true,
+  ): void {
+    if (!isMaterializationMotionVariant(motionVariant)) return;
+    const motionVariantIndex = materializationMotionIndex(motionVariant);
+    this.currentMotionVariant = motionVariant;
+
+    if (!crossfade || this.reducedMotion) {
+      this.pendingMotionVariant = null;
+      this.previousMotionVariantIndex.value = motionVariantIndex;
+      this.motionVariantIndex.value = motionVariantIndex;
+      this.previousMotionPhaseSeconds = 0;
+      this.motionPhaseSeconds = 0;
+      this.motionCrossfadeProgressValue = 1;
+    } else if (this.motionCrossfadeProgressValue <= 0) {
+      // The outgoing mode still has full weight, so the unseen destination can
+      // be replaced immediately without changing the rendered position.
+      this.pendingMotionVariant = null;
+      this.motionVariantIndex.value = motionVariantIndex;
+      this.motionPhaseSeconds = 0;
+    } else if (this.motionCrossfadeProgressValue < 1) {
+      // A two-slot shader cannot snapshot an arbitrary per-particle blend.
+      // Retain the currently visible fade and let the latest requested mode
+      // retarget from its exact endpoint instead of introducing a position pop.
+      this.pendingMotionVariant = motionVariant;
+      return;
+    } else {
+      this.pendingMotionVariant = null;
+      this.beginMotionCrossfade(motionVariant);
+    }
+
+    this.syncMotionUniforms();
+  }
+
   setPreset(preset: string): void {
     if (!PRESETS.includes(preset as (typeof PRESETS)[number])) return;
+    const previousPreset = this.currentPreset;
+    const shouldResetScatter = preset === "dormant"
+      && previousPreset !== "dormant"
+      && this.transitionProgress > 0
+      && !this.reducedMotion;
     this.currentPreset = preset as (typeof PRESETS)[number];
-    this.presetStartedAt = this.lastElapsed;
-    this.presetStartPending = true;
+    const previousWasTransition = previousPreset === "materialize" || previousPreset === "dissolve";
+    const nextIsTransition = this.currentPreset === "materialize" || this.currentPreset === "dissolve";
+    if (!previousWasTransition && nextIsTransition) {
+      this.transitionProgress = initialMaterializationProgress(
+        this.currentPreset,
+        this.reducedMotion,
+      );
+    } else if (!nextIsTransition) {
+      this.transitionProgress = 0;
+    }
+    this.transitionTarget = materializationTarget(this.currentPreset);
+    if (this.reducedMotion) this.transitionProgress = this.transitionTarget;
+    this.coalescenceProgress.value = this.transitionProgress;
     const enabled = preset === "dormant" ? 0 : 1;
     this.shaderEnabled.value = enabled;
     this.flowEnabled.value = enabled;
     this.flowFieldStrength.value = preset === "pulse" ? 3.15 : MATERIALIZATION_DEFAULTS.flowFieldStrength;
-    if (preset === "dissolve") this.setMaterializedSectionCount(SECTION_COUNT);
-    else this.setMaterializedSectionCount(0);
+    if (shouldResetScatter) this.resetPending = true;
   }
 
   dispose(): void {
     this.scene.remove(this.group);
+    this.resetComputeNode.dispose();
     this.computeNode.dispose();
+    disposeComputeOnlyStorage(this.renderer, this.initialParticles);
     disposeComputeOnlyStorage(this.renderer, this.base);
     this.points.geometry.dispose();
     this.sectionGeometries.forEach((geometry) => geometry.dispose());

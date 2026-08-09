@@ -120,11 +120,15 @@ function makeRuntime(id) {
     updates: [],
     resizes: [],
     selectedPresets: [],
+    selectedTransitionVariants: [],
+    selectedMotionVariants: [],
     disposals: 0,
     resources,
     update(frame) { this.updates.push(frame); },
     resize(...values) { this.resizes.push(values); },
     setPreset(value) { this.selectedPresets.push(value); },
+    setTransitionVariant(value) { this.selectedTransitionVariants.push(value); },
+    setMotionVariant(value, crossfade) { this.selectedMotionVariants.push([value, crossfade]); },
     dispose() {
       this.disposals += 1;
       resources.geometry += 1;
@@ -146,6 +150,8 @@ function makeHarness({
   reducedMotion = false,
   pointCloud = null,
   pointTarget,
+  transitionVariant,
+  motionVariant,
 } = {}) {
   const environment = new FakeEnvironment();
   environment.reducedMotion = reducedMotion;
@@ -165,6 +171,8 @@ function makeHarness({
     preset: "quiet-drift",
     pointCloud,
     pointTarget,
+    transitionVariant,
+    motionVariant,
     createRenderer: () => {
       if (rendererError) throw rendererError;
       const nextRenderer = renderers.length === 0 ? renderer : rendererFactory(renderers.length);
@@ -208,6 +216,47 @@ test("browser-local point targets reach the runtime and survive WebGPU renderer 
   assert.equal(harness.contexts[1].pointCloud, pointCloud);
   assert.equal(harness.contexts[1].pointTarget, "uploaded");
   harness.controller.dispose();
+});
+
+test("materialization transitions and motions propagate live and survive renderer restoration", async () => {
+  const harness = makeHarness({
+    transitionVariant: "organic-arc",
+    motionVariant: "gentle-drift",
+  });
+  await harness.controller.mount();
+
+  assert.equal(harness.contexts[0].transitionVariant, "organic-arc");
+  assert.equal(harness.contexts[0].motionVariant, "gentle-drift");
+  harness.controller.setTransitionVariant("spiral-vortex");
+  harness.controller.setMotionVariant("orbital-current");
+  assert.deepEqual(harness.runtimes[0].selectedTransitionVariants, ["spiral-vortex"]);
+  assert.deepEqual(harness.runtimes[0].selectedMotionVariants, [["orbital-current", true]]);
+
+  harness.controller.setPaused(true);
+  harness.controller.setMotionVariant("surface-breathe");
+  assert.deepEqual(
+    harness.runtimes[0].selectedMotionVariants.at(-1),
+    ["surface-breathe", false],
+    "paused motion changes request an immediate phase-zero preview",
+  );
+
+  harness.renderer.onDeviceLost({
+    api: "WebGPU",
+    message: "test loss",
+    reason: "unknown",
+    originalEvent: null,
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(harness.contexts[1].transitionVariant, "spiral-vortex");
+  assert.equal(harness.contexts[1].motionVariant, "surface-breathe");
+  harness.controller.dispose();
+
+  const reduced = makeHarness({ reducedMotion: true, motionVariant: "gentle-drift" });
+  await reduced.controller.mount();
+  reduced.controller.setMotionVariant("radial-ripple");
+  assert.deepEqual(reduced.runtimes[0].selectedMotionVariants, [["radial-ripple", false]]);
+  reduced.controller.dispose();
 });
 
 test("controller mounts, switches effects, and releases every owned resource on unmount", async () => {

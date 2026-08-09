@@ -4,6 +4,7 @@ export type AnalyticsEventName =
   | "catalog_filter"
   | "effect_select"
   | "local_model_import"
+  | "motion_change"
   | "playback_change"
   | "preset_change"
   | "quality_change"
@@ -12,7 +13,8 @@ export type AnalyticsEventName =
   | "source_tab_select"
   | "study_open"
   | "synthetic_audio_mode"
-  | "target_change";
+  | "target_change"
+  | "transition_change";
 
 export type AnalyticsEventParameters = Record<
   string,
